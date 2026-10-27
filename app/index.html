@@ -6,7 +6,6 @@
     <title>Zen</title>
     <script src="webOSTV.js"></script>
     <script src="env.js"></script>
-    <script src="assets/vendor/motion.js"></script>
     <style>
         /* Zen design tokens, adapted from DESIGN.md (Apple). Type sizes are scaled
            up ~1.5x from the web spec so they read from a sofa at 1080p. */
@@ -304,7 +303,8 @@
             background-color: #1d1d1f;
             background-size: cover;
             background-position: center 20%;
-            transition: background-image 0.6s ease;
+            will-change: transform;
+            transition: background-image 0.6s ease, transform 0.45s cubic-bezier(0.25, 1, 0.5, 1);
             z-index: 0;
         }
 
@@ -905,7 +905,6 @@
         .toast-msg {
             position: fixed;
             top: 32px;
-            /* Centered without a CSS transform, so Motion's y animation doesn't fight it. */
             left: 0;
             right: 0;
             margin: 0 auto;
@@ -1119,6 +1118,313 @@
             font-size: 16px;
             color: rgba(245, 245, 247, 0.7);
         }
+
+        /* Widgets: a second full screen parked below the home. ↓ from the dock pushes everything up one
+           screen. Only transform animates, and the glass blur is switched off while it moves
+           (body.screen-moving): re-blurring full-screen layers every frame is what TV hardware can't take. */
+        .container,
+        .widgets {
+            will-change: transform;
+            transition: transform 0.45s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        body.screen-moving .glass,
+        body.screen-moving .glass-panel {
+            -webkit-backdrop-filter: none;
+            backdrop-filter: none;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .container, .widgets, .hero-backdrop { transition: none; }
+        }
+
+        body.show-widgets .container,
+        body.show-widgets .hero-backdrop,
+        body.show-widgets .widgets {
+            transform: translateY(-100vh);
+        }
+
+        .widgets {
+            position: absolute;
+            top: 100vh;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 10;
+            padding: 60px 80px;
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+            color: #f5f5f7;
+            background: #000000 center / cover no-repeat;
+        }
+
+        /* Scrim over the photo of the day, so the glass cards have a picture to blur but text still reads. */
+        .widgets::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background: rgba(0, 0, 0, 0.6);
+        }
+
+        .widgets-row {
+            position: relative;
+            flex: 1 1 0;
+            min-height: 0;
+            display: flex;
+            gap: 28px;
+        }
+
+        .widget {
+            position: relative;
+            flex: 1 1 0;
+            min-width: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding: 28px 32px;
+            border-radius: var(--radius-card);
+            outline: none;
+            cursor: pointer;
+            will-change: transform;
+            /* Only the scale animates; the ring snaps on, since animating a shadow repaints every frame. */
+            transition: transform 0.2s var(--ease-focus);
+        }
+
+        .widget.wide { flex-grow: 2; }
+
+        .widget:hover,
+        .widget.focused {
+            transform: scale(1.03);
+            box-shadow: 0 0 0 4px #f5f5f7;
+            z-index: 20;
+        }
+
+        /* Photo widgets: the image fills the card and the text sits on a bottom scrim. */
+        .widget-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .widget.has-bg { justify-content: flex-end; }
+
+        .widget.has-bg::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0.8) 100%);
+        }
+
+        .widget.has-bg > :not(.widget-bg) { position: relative; z-index: 1; }
+
+        .widget-kicker {
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            color: rgba(245, 245, 247, 0.6);
+            margin-bottom: 10px;
+        }
+
+        .widget-title {
+            font-family: var(--font-display);
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.4px;
+            line-height: 1.15;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .widget-sub {
+            margin-top: 6px;
+            font-size: 18px;
+            color: rgba(245, 245, 247, 0.7);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .launch-count {
+            font-family: var(--font-display);
+            font-size: 56px;
+            font-weight: 200;
+            letter-spacing: -1px;
+            font-variant-numeric: tabular-nums;
+            margin-bottom: 4px;
+        }
+
+        .quote-row {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+            padding: 14px 0;
+            font-size: 18px;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .quote-row:first-of-type { border-top: none; }
+        .quote-name { flex: 1; color: rgba(245, 245, 247, 0.7); }
+        .quote-value { font-size: 28px; font-weight: 500; font-variant-numeric: tabular-nums; }
+        .quote-change { width: 84px; text-align: right; font-size: 16px; font-weight: 600; }
+        .up { color: #30d158; }
+        .down { color: #ff453a; }
+
+        .widget-cols {
+            display: flex;
+            gap: 40px;
+            min-height: 0;
+        }
+
+        .widget-cols > div { flex: 1 1 0; min-width: 0; }
+
+        .news-item {
+            padding: 12px 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .news-item:first-of-type { border-top: none; padding-top: 0; }
+
+        .news-title {
+            font-size: 18px;
+            font-weight: 500;
+            line-height: 1.35;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .news-meta { margin-top: 4px; font-size: 14px; color: rgba(245, 245, 247, 0.55); }
+
+        .game-row {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            gap: 20px;
+        }
+
+        .game-card { flex: 1 1 0; min-width: 0; }
+
+        .game-card img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .game-card .news-title { margin-top: 10px; }
+        .game-worth { text-decoration: line-through; margin-right: 8px; }
+        .game-free { color: #30d158; font-weight: 600; }
+
+        /* Widget popup: same glass sheet as the weather popup, wider for lists and photos. */
+        .widget-panel {
+            width: 1200px;
+            max-width: 100%;
+            max-height: 92vh;
+            overflow: hidden;
+            padding: 44px 52px 36px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .widget-panel #closePopupBtn { align-self: center; }
+        .popup-title { font-family: var(--font-display); font-size: 40px; font-weight: 600; letter-spacing: -0.6px; margin-top: -4px; }
+
+        .popup-photo {
+            width: 100%;
+            height: 520px;
+            object-fit: contain;
+            border-radius: 20px;
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .popup-text {
+            margin-top: 20px;
+            font-size: 18px;
+            line-height: 1.5;
+            color: rgba(245, 245, 247, 0.8);
+            display: -webkit-box;
+            -webkit-line-clamp: 4;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Two-column list (flex-wrap, since old webOS engines have no CSS grid). */
+        .popup-list {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+        }
+
+        .popup-list .news-item {
+            width: 48%;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 14px 12px;
+            border-radius: 14px;
+        }
+
+        .popup-list .news-item > div { min-width: 0; }
+        .popup-list img { flex: 0 0 auto; width: 120px; height: 68px; object-fit: cover; border-radius: 10px; }
+
+        /* Readable rows (TabNews): a light glass step on focus, no animation. */
+        .popup-list .popup-nav { cursor: pointer; }
+        .popup-list .popup-nav.focused { background: rgba(255, 255, 255, 0.16); border-top-color: transparent; }
+
+        /* Article reader: ↑ ↓ scroll it from the remote. */
+        .popup-scroll {
+            max-height: 60vh;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+            padding-right: 8px;
+        }
+
+        .popup-scroll::-webkit-scrollbar { display: none; }
+
+        .reader-p,
+        .reader-li {
+            font-size: 22px;
+            line-height: 1.6;
+            color: rgba(245, 245, 247, 0.88);
+            margin-bottom: 18px;
+            max-width: 980px;
+        }
+
+        .reader-li { margin: -8px 0 12px 8px; }
+
+        .reader-h {
+            font-family: var(--font-display);
+            font-size: 28px;
+            font-weight: 600;
+            margin: 32px 0 14px;
+        }
+
+        .reader-code {
+            font-family: Menlo, Consolas, monospace;
+            font-size: 16px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            padding: 18px 22px;
+            margin-bottom: 18px;
+            border-radius: 14px;
+            background: rgba(0, 0, 0, 0.35);
+        }
     </style>
 </head>
 <body>
@@ -1177,6 +1483,40 @@
             <div class="shelf-grid" id="appsGrid"></div>
         </div>
     </div>
+
+    <!-- Widgets screen, parked below the home: ↓ from the dock slides it in, Back returns. OK opens details. -->
+    <section class="widgets" id="widgets" aria-label="Widgets">
+        <div class="widgets-row">
+            <div class="widget wide has-bg glass nav-item" id="wPhoto" tabindex="0">
+                <img class="widget-bg" id="photoImg" alt="">
+                <div class="widget-kicker">Imagem do dia</div>
+                <div class="widget-title" id="photoTitle">Carregando…</div>
+            </div>
+            <div class="widget has-bg glass nav-item" id="wLaunch" tabindex="0">
+                <img class="widget-bg" id="launchImg" alt="">
+                <div class="widget-kicker">Próximo lançamento</div>
+                <div class="launch-count" id="launchCount">--:--:--</div>
+                <div class="widget-title" id="launchName">Carregando…</div>
+                <div class="widget-sub" id="launchSub"></div>
+            </div>
+            <div class="widget glass nav-item" id="wQuotes" tabindex="0">
+                <div class="widget-kicker">Cotações</div>
+                <div id="quoteList"></div>
+            </div>
+        </div>
+        <div class="widgets-row">
+            <div class="widget wide glass nav-item" id="wNews" tabindex="0">
+                <div class="widget-cols">
+                    <div><div class="widget-kicker">TabNews</div><div id="tabnewsList"></div></div>
+                    <div><div class="widget-kicker">Hacker News</div><div id="hnList"></div></div>
+                </div>
+            </div>
+            <div class="widget wide glass nav-item" id="wGames" tabindex="0">
+                <div class="widget-kicker">Jogos grátis agora</div>
+                <div class="game-row" id="gameRow"></div>
+            </div>
+        </div>
+    </section>
 
     <!-- Customize Shelf & Settings Modal -->
     <div class="modal-backdrop" id="settingsModal">
@@ -1301,6 +1641,18 @@
             </div>
 
             <button class="header-btn glass" id="closeDrawerBtn">Fechar</button>
+        </div>
+    </div>
+
+    <!-- Widget details popup, filled by whichever widget opened it. -->
+    <div class="modal-backdrop" id="widgetPopup">
+        <div class="widget-panel glass-panel" role="dialog" aria-labelledby="popupTitle">
+            <div>
+                <div class="widget-kicker" id="popupKicker"></div>
+                <div class="popup-title" id="popupTitle"></div>
+            </div>
+            <div id="popupBody"></div>
+            <button class="header-btn glass popup-nav" id="closePopupBtn">Fechar</button>
         </div>
     </div>
 
@@ -1515,32 +1867,8 @@
         function showToast(msg, duration) {
             toastEl.textContent = msg;
             toastEl.style.display = 'block';
-            if (window.Motion) Motion.animate(toastEl, { opacity: [0, 1], y: [-16, 0] }, { type: 'spring', bounce: 0.3, duration: 0.4 });
             clearTimeout(window._toastTimer);
             window._toastTimer = setTimeout(function() { toastEl.style.display = 'none'; }, duration || 2400);
-        }
-
-        // Popups spring in/out with Motion (assets/vendor/motion.js, MIT). `hidden` is the
-        // panel's off state, e.g. { opacity: 0, scale: 0.94 } or { x: '100%' }. Old engines
-        // that can't load Motion just show/hide the popup instantly.
-        function animatePopup(backdrop, panel, show, hidden) {
-            backdrop._open = show;
-            if (show) backdrop.classList.add('active');
-            if (!window.Motion) {
-                if (!show) backdrop.classList.remove('active');
-                return;
-            }
-            var frames = {};
-            Object.keys(hidden).forEach(function(k) {
-                var on = (k === 'opacity' || k === 'scale') ? 1 : 0;
-                frames[k] = show ? [hidden[k], on] : [on, hidden[k]];
-            });
-            Motion.animate(backdrop, { opacity: show ? [0, 1] : [1, 0] }, { duration: show ? 0.25 : 0.2 });
-            Motion.animate(panel, frames, show ? { type: 'spring', bounce: 0.22, duration: 0.5 } : { duration: 0.2 })
-                .then(function() {
-                    // Skip if the popup was reopened while this close animation ran.
-                    if (!backdrop._open) backdrop.classList.remove('active');
-                });
         }
 
         // --- Theme Engine ---
@@ -1923,7 +2251,8 @@
         var shelfEdit = null;
         var movingTileId = null;
         var pendingLaunch = null;
-        function launchApp(appId) {
+        // `params` goes to the app as its launch params, e.g. { target: url } for the browser.
+        function launchApp(appId, params) {
             if (shelfEdit || pendingLaunch) return; // Ignore repeated remote presses while a request is pending.
             var app = arrFind(state.catalog, function(item) { return item.id === appId; });
             var title = app ? (devicePreset(app, state.hdmiDevices).title || app.title) : appId;
@@ -1953,7 +2282,8 @@
             function fallback(originalError) {
                 if (pendingLaunch !== request) return;
                 // Only known app-ID characters may enter the legacy shell-based fallback.
-                if (!/^[a-zA-Z0-9._-]+$/.test(appId)) { failure(originalError); return; }
+                // Launch params never go through the shell either, so a launch that needs them can't fall back.
+                if (params || !/^[a-zA-Z0-9._-]+$/.test(appId)) { failure(originalError); return; }
                 try {
                     webOS.service.request('luna://org.webosbrew.hbchannel.service', {
                         method: 'exec',
@@ -1978,7 +2308,7 @@
             try {
                 webOS.service.request('luna://com.webos.applicationManager', {
                     method: 'launch',
-                    parameters: { id: appId },
+                    parameters: params ? { id: appId, params: params } : { id: appId },
                     onSuccess: function(result) {
                         if (pendingLaunch !== request) return;
                         if (result && result.returnValue === false) fallback(result);
@@ -2147,9 +2477,18 @@
             document.querySelectorAll('.nav-item.focused').forEach(function(i) { i.classList.remove('focused'); });
             item.classList.add('focused');
             item.focus({ preventScroll: true });
+            window.scrollTo(0, 0); // old engines ignore preventScroll; the widgets screen moves by transform, never by scroll
+            var toWidgets = !!item.closest('#widgets');
+            if (toWidgets !== document.body.classList.contains('show-widgets')) {
+                // Blur off while the screens slide (see body.screen-moving), back on once they land.
+                document.body.classList.add('screen-moving');
+                clearTimeout(screenMoveTimer);
+                screenMoveTimer = setTimeout(function() { document.body.classList.remove('screen-moving'); }, 500);
+                document.body.classList.toggle('show-widgets', toWidgets);
+            }
             curIndex = mainNavItems.indexOf(item);
-
         }
+        var screenMoveTimer = null;
 
         // Pick text comes from TMDB/TVMaze (TVMaze is community-edited), so it is set as text, never HTML.
         function showHero(i) {
@@ -2317,7 +2656,7 @@
             document.getElementById('cfgTmdbKey').value = state.tmdbKey;
 
             renderAppSelectorGrid();
-            animatePopup(settingsModal, settingsModal.querySelector('.modal-box'), true, MODAL_HIDDEN);
+            settingsModal.classList.add('active');
             showSettingsPane('apps');
             setModalFocus(sideItem('apps'));
         }
@@ -2380,10 +2719,9 @@
             });
         }
 
-        var MODAL_HIDDEN = { opacity: 0, scale: 0.94 };
         function closeSettingsModal() {
             modalOpen = false;
-            animatePopup(settingsModal, settingsModal.querySelector('.modal-box'), false, MODAL_HIDDEN);
+            settingsModal.classList.remove('active');
             setMainFocus(mainNavItems[curIndex]);
         }
 
@@ -2452,8 +2790,6 @@
             toArray(settingsModal.querySelectorAll('.pane')).forEach(function(p) { p.hidden = p.dataset.pane !== name; });
             toArray(settingsModal.querySelectorAll('.side-item')).forEach(function(s) { s.classList.toggle('active', s.dataset.pane === name); });
             settingsModal.querySelector('.settings-scroll').scrollTop = 0;
-            var pane = settingsModal.querySelector('.pane[data-pane="' + name + '"]');
-            if (window.Motion) Motion.animate(pane, { x: [24, 0], opacity: [0, 1] }, { duration: 0.25 });
             modalNavItems = collectModalNav();
         }
         toArray(settingsModal.querySelectorAll('.side-item')).forEach(function(item) {
@@ -2579,19 +2915,364 @@
         function openDrawer() {
             if (shelfEdit) return;
             drawerOpen = true;
-            animatePopup(weatherDrawer, weatherDrawer.querySelector('.weather-panel'), true, MODAL_HIDDEN);
+            weatherDrawer.classList.add('active');
             closeDrawerBtn.classList.add('focused');
             closeDrawerBtn.focus();
         }
 
         function closeDrawer() {
             drawerOpen = false;
-            animatePopup(weatherDrawer, weatherDrawer.querySelector('.weather-panel'), false, MODAL_HIDDEN);
+            weatherDrawer.classList.remove('active');
             closeDrawerBtn.classList.remove('focused');
             setMainFocus(mainNavItems[curIndex]);
         }
 
         closeDrawerBtn.addEventListener('click', closeDrawer);
+
+        // --- Widgets screen: picture of the day, next rocket launch, quotes, tech news, free games ---
+        // Every source is free and CORS-open. Responses are cached in localStorage so a TV left on all day
+        // stays inside the free hourly limits, and the last good copy still shows when a source is down.
+        var widgetData = {};
+        var widgetPopup = document.getElementById('widgetPopup');
+        var closePopupBtn = document.getElementById('closePopupBtn');
+        var popupOpen = false;
+
+        function cachedJson(key, url, ttlMinutes) {
+            var hit = null;
+            try { hit = JSON.parse(localStorage.getItem('zen_w_' + key) || 'null'); } catch (e) {}
+            if (hit && Date.now() - hit.at < ttlMinutes * 60000) return Promise.resolve(hit.data);
+            return fetch(url)
+                .then(function(res) {
+                    if (!res.ok) throw new Error(url + ': HTTP ' + res.status);
+                    return res.json();
+                })
+                .then(function(data) {
+                    try { localStorage.setItem('zen_w_' + key, JSON.stringify({ at: Date.now(), data: data })); } catch (e) {}
+                    return data;
+                })
+                .catch(function(error) {
+                    if (hit) return hit.data;
+                    throw error;
+                });
+        }
+
+        // Widget text comes from third-party APIs, so it always goes in as text, never HTML.
+        function el(tag, className, text) {
+            var node = document.createElement(tag);
+            if (className) node.className = className;
+            if (text != null) node.textContent = text;
+            return node;
+        }
+
+        // Third-party URLs: only plain https ones may reach an img src, a CSS url() or the browser.
+        function safeUrl(url) { return url && /^https:\/\/[^\s"'()\\]+$/.test(url) ? url : ''; }
+
+        function fillList(container, nodes) {
+            container.innerHTML = '';
+            nodes.forEach(function(node) { container.appendChild(node); });
+        }
+
+        function widgetError(id, text) {
+            fillList(document.getElementById(id), [el('div', 'news-meta', text || 'Indisponível agora')]);
+        }
+
+        function newsItem(title, meta, img) {
+            var item = el('div', 'news-item');
+            if (img) {
+                var pic = el('img');
+                pic.src = img;
+                pic.alt = '';
+                item.appendChild(pic);
+            }
+            var text = el('div');
+            text.appendChild(el('div', 'news-title', title));
+            text.appendChild(el('div', 'news-meta', meta));
+            item.appendChild(text);
+            return item;
+        }
+
+        // Wikimedia Commons picture of the day, captioned in Portuguese. (NASA's APOD API was the first pick,
+        // but it currently answers every date with the NASA logo.)
+        function loadPhoto() {
+            var d = new Date();
+            cachedJson('photo', 'https://api.wikimedia.org/feed/v1/wikipedia/pt/featured/' + d.getFullYear() + '/' + pad2(d.getMonth() + 1) + '/' + pad2(d.getDate()), 360)
+                .then(function(feed) {
+                    var photo = feed.image;
+                    if (!photo || !photo.thumbnail) throw new Error('no picture of the day');
+                    // The feed's thumbnail is 960px; Commons serves the same file at 1920px for the TV.
+                    var img = safeUrl(photo.thumbnail.source.replace(/\/\d+px-/, '/1920px-'));
+                    widgetData.photo = photo;
+                    document.getElementById('photoTitle').textContent = photo.description ? photo.description.text : '';
+                    if (!img) return;
+                    document.getElementById('photoImg').src = img;
+                    document.getElementById('widgets').style.backgroundImage = "url('" + img + "')";
+                })
+                .catch(function() { widgetError('photoTitle', 'Imagem do dia indisponível'); });
+        }
+
+        function loadLaunches() {
+            cachedJson('launches', 'https://ll.thespacedevs.com/2.2.0/launch/upcoming/?limit=6&mode=list', 60)
+                .then(function(data) {
+                    widgetData.launches = data.results || [];
+                    // The feed keeps a launch listed for a while after liftoff; count down to the next one still ahead.
+                    var next = arrFind(widgetData.launches, function(l) { return Date.parse(l.net) > Date.now(); }) || widgetData.launches[0];
+                    widgetData.nextLaunch = next;
+                    if (!next) return widgetError('launchName', 'Nenhum lançamento marcado');
+                    document.getElementById('launchName').textContent = next.mission || next.name;
+                    document.getElementById('launchSub').textContent = next.name.split(' | ')[0] + ' · ' + next.lsp_name;
+                    var img = safeUrl(next.image);
+                    if (img) document.getElementById('launchImg').src = img;
+                    tickLaunch();
+                })
+                .catch(function() { widgetError('launchName', 'Lançamentos indisponíveis'); });
+        }
+
+        function tickLaunch() {
+            if (!widgetData.nextLaunch) return;
+            var s = Math.round((Date.parse(widgetData.nextLaunch.net) - Date.now()) / 1000);
+            var days = Math.floor(s / 86400);
+            document.getElementById('launchCount').textContent = s <= 0 ? 'Decolou' :
+                'T−' + (days ? days + 'd ' : '') + pad2(Math.floor(s % 86400 / 3600)) + ':' + pad2(Math.floor(s % 3600 / 60)) + ':' + pad2(s % 60);
+        }
+        setInterval(tickLaunch, 1000);
+
+        var QUOTES = [['USDBRL', 'Dólar', 2], ['EURBRL', 'Euro', 2], ['BTCBRL', 'Bitcoin', 0]];
+        function loadQuotes() {
+            cachedJson('quotes', 'https://economia.awesomeapi.com.br/json/last/USD-BRL,EUR-BRL,BTC-BRL', 10)
+                .then(function(data) {
+                    fillList(document.getElementById('quoteList'), QUOTES.filter(function(q) { return data[q[0]]; }).map(function(q) {
+                        var quote = data[q[0]];
+                        var pct = parseFloat(quote.pctChange) || 0;
+                        var row = el('div', 'quote-row');
+                        row.appendChild(el('div', 'quote-name', q[1]));
+                        row.appendChild(el('div', 'quote-value', 'R$ ' + parseFloat(quote.bid).toLocaleString('pt-BR', { minimumFractionDigits: q[2], maximumFractionDigits: q[2] })));
+                        row.appendChild(el('div', 'quote-change ' + (pct < 0 ? 'down' : 'up'), (pct < 0 ? '▼ ' : '▲ ') + Math.abs(pct).toFixed(2).replace('.', ',') + '%'));
+                        return row;
+                    }));
+                })
+                .catch(function() { widgetError('quoteList'); });
+        }
+
+        function renderNews(id, items) {
+            fillList(document.getElementById(id), items.slice(0, 4).map(function(n) { return newsItem(n.title, n.meta); }));
+        }
+
+        function loadNews() {
+            cachedJson('tabnews', 'https://www.tabnews.com.br/api/v1/contents?strategy=relevant&per_page=8', 30)
+                .then(function(posts) {
+                    widgetData.tabnews = posts.map(function(p) {
+                        return { title: p.title, meta: p.owner_username + ' · ' + p.tabcoins + ' tabcoins · ' + p.children_deep_count + ' comentários', user: p.owner_username, slug: p.slug };
+                    });
+                    renderNews('tabnewsList', widgetData.tabnews);
+                })
+                .catch(function() { widgetError('tabnewsList'); });
+            cachedJson('hn', 'https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=8', 30)
+                .then(function(data) {
+                    widgetData.hn = data.hits.map(function(h) {
+                        // Ask HN posts have no link of their own; their HN page is the story.
+                        var url = safeUrl(h.url) || 'https://news.ycombinator.com/item?id=' + encodeURIComponent(h.objectID);
+                        return { title: h.title, meta: h.points + ' pontos · ' + h.num_comments + ' comentários', url: url };
+                    });
+                    renderNews('hnList', widgetData.hn);
+                })
+                .catch(function() { widgetError('hnList'); });
+        }
+
+        function loadGames() {
+            cachedJson('games', 'https://www.gamerpower.com/api/filter?platform=epic-games-store.steam.gog.ps5.xbox-series-xs&type=game&sort-by=popularity', 120)
+                .then(function(games) {
+                    // "Terraspace (Epic Games) Giveaway" -> title "Terraspace", store "Epic Games".
+                    widgetData.games = games.filter(function(g) { return g.status === 'Active'; }).map(function(g) {
+                        var store = /\(([^)]+)\)/.exec(g.title);
+                        var until = /^\d{4}-(\d\d)-(\d\d)/.exec(g.end_date);
+                        return {
+                            title: g.title.replace(/\s*\([^)]*\)\s*(Key\s+)?Giveaway$/i, ''),
+                            worth: g.worth !== 'N/A' ? g.worth : '',
+                            info: [store ? store[1] : g.platforms, until ? 'até ' + until[2] + '/' + until[1] : ''].filter(Boolean).join(' · '),
+                            img: safeUrl(g.thumbnail)
+                        };
+                    });
+                    if (!widgetData.games.length) return widgetError('gameRow', 'Nenhum jogo grátis agora');
+                    fillList(document.getElementById('gameRow'), widgetData.games.slice(0, 3).map(function(g) {
+                        var card = el('div', 'game-card');
+                        var pic = el('img');
+                        if (g.img) pic.src = g.img;
+                        pic.alt = '';
+                        card.appendChild(pic);
+                        card.appendChild(el('div', 'news-title', g.title));
+                        var meta = el('div', 'news-meta');
+                        if (g.worth) meta.appendChild(el('span', 'game-worth', g.worth));
+                        meta.appendChild(el('span', 'game-free', 'Grátis'));
+                        meta.appendChild(document.createTextNode(' · ' + g.info));
+                        card.appendChild(meta);
+                        return card;
+                    }));
+                })
+                .catch(function() { widgetError('gameRow'); });
+        }
+
+        function loadWidgets() {
+            if (typeof fetch !== 'function') return;
+            loadPhoto();
+            loadLaunches();
+            loadQuotes();
+            loadNews();
+            loadGames();
+        }
+
+        // Inside the popup, the arrows walk the .popup-nav items (readable rows, then Fechar) and OK opens one.
+        // `back` is where the Back key goes instead of closing, e.g. from an article to the news list.
+        var popupNav = [];
+        var popupIndex = 0;
+        var popupBack = null;
+
+        function setPopupFocus(i) {
+            popupIndex = Math.max(0, Math.min(i, popupNav.length - 1));
+            popupNav.forEach(function(item, n) { item.classList.toggle('focused', n === popupIndex); });
+            popupNav[popupIndex].focus({ preventScroll: true });
+        }
+
+        function openWidgetPopup(kicker, title, body, back) {
+            document.getElementById('popupKicker').textContent = kicker;
+            document.getElementById('popupTitle').textContent = title;
+            fillList(document.getElementById('popupBody'), [body]);
+            popupBack = back || null;
+            popupNav = toArray(widgetPopup.querySelectorAll('.popup-nav'));
+            popupOpen = true;
+            widgetPopup.classList.add('active');
+            setPopupFocus(0);
+        }
+
+        function closeWidgetPopup() {
+            popupOpen = false;
+            widgetPopup.classList.remove('active');
+            popupNav.forEach(function(item) { item.classList.remove('focused'); });
+            setMainFocus(mainNavItems[curIndex]);
+        }
+        closePopupBtn.addEventListener('click', closeWidgetPopup);
+
+        function popupList(items) {
+            var list = el('div', 'popup-list');
+            items.forEach(function(i) {
+                var row = newsItem(i.title, i.meta, i.img);
+                if (i.open) {
+                    row.classList.add('popup-nav');
+                    row.addEventListener('click', i.open);
+                    row.addEventListener('mouseenter', function() { setPopupFocus(popupNav.indexOf(row)); });
+                }
+                list.appendChild(row);
+            });
+            return list;
+        }
+
+        // Just enough Markdown for TabNews posts, rendered as text nodes: headings, lists, code blocks and
+        // paragraphs, with links reduced to their text and images dropped (no way to follow them on a TV).
+        function mdInline(text) {
+            return text.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\*\*|__|`/g, '').replace(/\*([^*\s][^*]*)\*/g, '$1').trim();
+        }
+
+        function markdownBlocks(md) {
+            var blocks = [];
+            var para = [];
+            var code = null;
+            function push(className, text) { if (text) blocks.push(el('div', className, text)); }
+            function flush() { push('reader-p', mdInline(para.join(' '))); para = []; }
+            md.split(/\r?\n/).forEach(function(line) {
+                if (/^\s*```/.test(line)) {
+                    if (code) { push('reader-code', code.join('\n')); code = null; } else { flush(); code = []; }
+                } else if (code) {
+                    code.push(line);
+                } else if (/^#{1,6}\s/.test(line)) {
+                    flush();
+                    push('reader-h', mdInline(line.replace(/^#+\s*/, '')));
+                } else if (/^\s*([-*+]|\d+\.)\s/.test(line)) {
+                    flush();
+                    push('reader-li', mdInline(line.replace(/^\s*[-*+]\s/, '• ')));
+                } else if (!line.trim()) {
+                    flush();
+                } else {
+                    para.push(line.replace(/^>\s?/, ''));
+                }
+            });
+            if (code) push('reader-code', code.join('\n'));
+            flush();
+            return blocks;
+        }
+        console.assert(mdInline('**a** [b](https://x) `c` *d* 2 * 3 ![i](https://y)') === 'a b c d 2 * 3', 'mdInline self-check failed');
+        console.assert(markdownBlocks('# T\n\nline one\nline two\n\n- item\n```\nx\n\ny\n```').map(function(b) { return b.className + ':' + b.textContent; }).join('|') ===
+            'reader-h:T|reader-p:line one line two|reader-li:• item|reader-code:x\n\ny', 'markdownBlocks self-check failed');
+
+        function openNewsPopup(focusIndex) {
+            // Interleaved so the two-column list reads TabNews on the left, Hacker News on the right.
+            // TabNews posts open in the reader (its API serves the whole post); Hacker News stories live
+            // on other sites, so they open in the TV's browser.
+            var items = [];
+            for (var i = 0; i < 6; i++) {
+                var tab = widgetData.tabnews && widgetData.tabnews[i];
+                var hn = widgetData.hn && widgetData.hn[i];
+                if (tab) items.push({ title: tab.title, meta: 'TabNews · ' + tab.meta, open: openArticle.bind(null, tab, items.length) });
+                if (hn) items.push({ title: hn.title, meta: 'Hacker News · ' + hn.meta, open: launchApp.bind(null, 'com.webos.app.browser', { target: hn.url }) });
+            }
+            if (!items.length) return;
+            openWidgetPopup('Notícias de tecnologia · OK abre a matéria', 'Em alta agora', popupList(items));
+            if (focusIndex) setPopupFocus(focusIndex);
+        }
+
+        function openArticle(post, listIndex) {
+            var body = el('div', 'popup-scroll');
+            body.appendChild(el('div', 'news-meta', 'Carregando…'));
+            openWidgetPopup('TabNews · ' + post.user, post.title, body, function() { openNewsPopup(listIndex); });
+            fetch('https://www.tabnews.com.br/api/v1/contents/' + encodeURIComponent(post.user) + '/' + encodeURIComponent(post.slug))
+                .then(function(res) {
+                    if (!res.ok) throw new Error('TabNews: HTTP ' + res.status);
+                    return res.json();
+                })
+                .then(function(content) { fillList(body, markdownBlocks(content.body || '')); })
+                .catch(function() { fillList(body, [el('div', 'news-meta', 'Não foi possível carregar a matéria')]); });
+        }
+
+        document.getElementById('wPhoto').addEventListener('click', function() {
+            var photo = widgetData.photo;
+            if (!photo) return;
+            var caption = photo.description ? photo.description.text : '';
+            var body = el('div');
+            var pic = el('img', 'popup-photo');
+            pic.src = document.getElementById('photoImg').src;
+            pic.alt = caption;
+            body.appendChild(pic);
+            body.appendChild(el('div', 'popup-text', caption));
+            var credit = [photo.artist && photo.artist.text, photo.license && photo.license.type].filter(Boolean).join(' · ');
+            openWidgetPopup('Wikimedia Commons · Imagem do dia', credit ? 'Foto: ' + credit : 'Imagem do dia', body);
+        });
+
+        document.getElementById('wLaunch').addEventListener('click', function() {
+            if (!widgetData.launches || !widgetData.launches.length) return;
+            openWidgetPopup('Próximos lançamentos', 'Agenda de foguetes', popupList(widgetData.launches.map(function(l) {
+                var when = new Date(Date.parse(l.net)).toLocaleString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+                return { title: l.mission || l.name, meta: when + ' · ' + l.name.split(' | ')[0] + ' · ' + l.location, img: safeUrl(l.image) };
+            })));
+        });
+
+        document.getElementById('wNews').addEventListener('click', function() { openNewsPopup(0); });
+
+        document.getElementById('wGames').addEventListener('click', function() {
+            if (!widgetData.games || !widgetData.games.length) return;
+            openWidgetPopup('GamerPower', 'Jogos grátis agora', popupList(widgetData.games.slice(0, 8).map(function(g) {
+                return { title: g.title, meta: (g.worth ? g.worth + ' → ' : '') + 'Grátis · ' + g.info, img: g.img };
+            })));
+        });
+
+        toArray(document.querySelectorAll('.widget')).forEach(function(w) {
+            w.addEventListener('mouseenter', function() { setMainFocus(w); });
+        });
+
+        // Magic Remote wheel: down opens the widgets screen, up goes back home.
+        document.addEventListener('wheel', function(e) {
+            if (modalOpen || drawerOpen || popupOpen || shelfEdit) return;
+            var inWidgets = document.body.classList.contains('show-widgets');
+            if (e.deltaY > 0 && !inWidgets) setMainFocus(document.getElementById('wPhoto'));
+            else if (e.deltaY < 0 && inWidgets) setMainFocus(document.querySelector('.app-tile'));
+        });
 
         // --- Idle Screensaver: art paintings (Frame-TV style) or the OLED-safe floating clock ---
         var PIXEL_SHIFT_MS = 25 * 1000;
@@ -2713,7 +3394,7 @@
         document.addEventListener('mousedown', markActivity);
 
         setInterval(function() {
-            if (!screensaverOn && !modalOpen && !drawerOpen && state.screensaver !== 'off'
+            if (!screensaverOn && !modalOpen && !drawerOpen && !popupOpen && state.screensaver !== 'off'
                 && Date.now() - lastActivity > state.screensaverDelay * 60 * 1000) {
                 enterScreensaver();
             }
@@ -2797,6 +3478,13 @@
                 } else if (drawerOpen) {
                     closeDrawer();
                     e.preventDefault();
+                } else if (popupOpen) {
+                    if (popupBack) popupBack();
+                    else closeWidgetPopup();
+                    e.preventDefault();
+                } else if (document.body.classList.contains('show-widgets')) {
+                    setMainFocus(document.querySelector('.app-tile'));
+                    e.preventDefault();
                 }
                 return;
             }
@@ -2806,6 +3494,21 @@
                     closeDrawer();
                     e.preventDefault();
                 }
+                return;
+            }
+
+            if (popupOpen) {
+                var scroller = widgetPopup.querySelector('.popup-scroll');
+                if (scroller && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                    scroller.scrollTop += e.key === 'ArrowDown' ? 180 : -180;
+                } else if (/^Arrow(Up|Down|Left|Right)$/.test(e.key)) {
+                    // Rows sit in two columns, so ↑ ↓ jump a whole row (two items) and ← → move across.
+                    var rowStep = (e.key === 'ArrowUp' || e.key === 'ArrowDown') && widgetPopup.querySelector('.popup-list .popup-nav') ? 2 : 1;
+                    setPopupFocus(popupIndex + (e.key === 'ArrowDown' || e.key === 'ArrowRight' ? rowStep : -rowStep));
+                } else if (e.key === 'Enter') {
+                    popupNav[popupIndex].click();
+                } else return;
+                e.preventDefault();
                 return;
             }
 
@@ -2829,13 +3532,12 @@
             if (mainNavItems[curIndex] === heroBanner && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
                 showHero(heroIndex + (e.key === 'ArrowRight' ? 1 : -1));
                 e.preventDefault();
-            } else if (e.key === 'ArrowRight') {
-                curIndex = (curIndex + 1) % mainNavItems.length;
-                setMainFocus(mainNavItems[curIndex]);
-                e.preventDefault();
-            } else if (e.key === 'ArrowLeft') {
-                curIndex = (curIndex - 1 + mainNavItems.length) % mainNavItems.length;
-                setMainFocus(mainNavItems[curIndex]);
+            } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                // Left/Right wrap within the current screen, so they never slide between home and widgets.
+                var inWidgets = !!(mainNavItems[curIndex] && mainNavItems[curIndex].closest('#widgets'));
+                var screenItems = mainNavItems.filter(function(el) { return !!el.closest('#widgets') === inWidgets; });
+                var next = screenItems.indexOf(mainNavItems[curIndex]) + (e.key === 'ArrowRight' ? 1 : -1);
+                setMainFocus(screenItems[(next + screenItems.length) % screenItems.length]);
                 e.preventDefault();
             } else if (e.key === 'ArrowDown') {
                 moveFocusVertical(1);
@@ -2858,9 +3560,11 @@
         fetchWeather();
         fetchTrendingPicks();
         discoverTVApps();
-        // Refresh weather & picks every 30 mins
+        loadWidgets();
+        // Refresh weather & picks every 30 mins; widgets check every 10 (each source's cache TTL decides the real rate)
         setInterval(fetchWeather, 30 * 60 * 1000);
         setInterval(fetchTrendingPicks, 60 * 60 * 1000);
+        setInterval(loadWidgets, 10 * 60 * 1000);
     </script>
 </body>
 </html>

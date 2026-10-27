@@ -17,12 +17,21 @@ Zen é um fork do [**Free My TV for LG webOS**](https://github.com/danielthejoke
 - Botões, abas, clima e popups em Liquid Glass: vidro translúcido com desfoque e brilho na borda.
 - Dock de apps centralizado sobre vidro, com ícones 5:3 e logos atualizados: Prime Video, Globoplay, Twitch, Kick e Google para o navegador.
 - Tipografia Inter embutida no app (funciona offline) e escala de 4 tamanhos de fonte.
-- Popups abrem e fecham com animações de mola do [Motion](https://motion.dev).
+- Animações leves, só em CSS: popups e a troca para os widgets são instantâneos, para rodar liso no hardware da TV.
 
 **Filmes e séries**
 - Em alta da semana direto do TMDB, em português (título, sinopse, ano e nota).
 - Logos dos streamings onde cada título está disponível no Brasil, ao lado da nota (dados do JustWatch).
 - O OK no banner abre o app do streaming certo, dando preferência a um que já esteja no seu dock.
+
+**Widgets**
+- A seta ↓ a partir do dock (ou a rodinha do Magic Remote) abre uma segunda tela de widgets, e Voltar retorna.
+- Imagem do dia do Wikimedia Commons, que também vira o fundo da tela.
+- Próximo lançamento de foguete com contagem regressiva ao vivo (Launch Library 2).
+- Dólar, euro e bitcoin com a variação do dia (AwesomeAPI).
+- Notícias de tecnologia do TabNews e do Hacker News. As matérias do TabNews abrem inteiras dentro do Zen, e ↑ ↓ rolam o texto. As do Hacker News abrem no navegador da TV.
+- Jogos grátis agora na Epic, Steam, GOG, PS5 e Xbox (GamerPower).
+- O OK abre os detalhes. Nada precisa de chave, e um cache local respeita os limites das APIs e mantém os últimos dados quando a rede cai.
 
 **Entradas HDMI**
 - Escolha o videogame de cada entrada (PlayStation 5 e 4, Xbox, Nintendo Switch, PC Gamer). O ícone passa a mostrar o logo do aparelho.
@@ -96,8 +105,7 @@ app/
 ├── assets/
 │   ├── art/          # quadros do protetor de tela (+ SOURCES.md)
 │   ├── brands/       # logos dos apps e consoles (+ SOURCES.md)
-│   ├── fonts/        # Inter
-│   └── vendor/       # Motion
+│   └── fonts/        # Inter
 scripts/
 ├── build.py          # gera o .ipk (roda env.js antes)
 ├── env.js            # .env → app/env.js
@@ -112,7 +120,7 @@ DESIGN.md             # referência visual usada no redesign
 - Clima: [Open-Meteo](https://open-meteo.com).
 - Quadros: [The Metropolitan Museum of Art](https://www.metmuseum.org/about-the-met/policies-and-documents/open-access), Open Access (CC0). Lista completa em `app/assets/art/SOURCES.md`.
 - Ícones de clima: [Font Awesome Free](https://fontawesome.com/license/free) (CC BY 4.0). Logos: [Simple Icons](https://simpleicons.org) (CC0) e Wikimedia Commons, com detalhes em `app/assets/brands/SOURCES.md`. As marcas pertencem aos seus donos.
-- Fonte: [Inter](https://rsms.me/inter/) (SIL OFL). Animações: [Motion](https://motion.dev) (MIT).
+- Fonte: [Inter](https://rsms.me/inter/) (SIL OFL).
 
 ## Licença
 
