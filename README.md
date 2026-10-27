@@ -24,6 +24,15 @@ Zen é um fork do [**Free My TV for LG webOS**](https://github.com/danielthejoke
 - Logos dos streamings onde cada título está disponível no Brasil, ao lado da nota (dados do JustWatch).
 - O OK no banner abre o app do streaming certo, dando preferência a um que já esteja no seu dock.
 
+**Widgets**
+- A seta ↓ a partir do dock (ou a rodinha do Magic Remote) abre uma segunda tela de widgets, e Voltar retorna.
+- Imagem do dia do Wikimedia Commons, que também vira o fundo da tela.
+- Próximo lançamento de foguete com contagem regressiva ao vivo (Launch Library 2).
+- Dólar, euro e bitcoin com a variação do dia (AwesomeAPI).
+- Notícias de tecnologia do TabNews e do Hacker News.
+- Jogos grátis agora na Epic, Steam, GOG, PS5 e Xbox (GamerPower).
+- O OK abre os detalhes. Nada precisa de chave, e um cache local respeita os limites das APIs e mantém os últimos dados quando a rede cai.
+
 **Entradas HDMI**
 - Escolha o videogame de cada entrada (PlayStation 5 e 4, Xbox, Nintendo Switch, PC Gamer). O ícone passa a mostrar o logo do aparelho.
 
