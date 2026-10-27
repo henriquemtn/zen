@@ -303,7 +303,8 @@
             background-color: #1d1d1f;
             background-size: cover;
             background-position: center 20%;
-            transition: background-image 0.6s ease;
+            will-change: transform;
+            transition: background-image 0.6s ease, transform 0.45s cubic-bezier(0.25, 1, 0.5, 1);
             z-index: 0;
         }
 
@@ -1118,8 +1119,25 @@
             color: rgba(245, 245, 247, 0.7);
         }
 
-        /* Widgets: a second full screen parked below the home. ↓ from the dock shifts everything up one
-           screen at once: animating full-screen glass layers is too heavy for TV hardware. */
+        /* Widgets: a second full screen parked below the home. ↓ from the dock pushes everything up one
+           screen. Only transform animates, and the glass blur is switched off while it moves
+           (body.screen-moving): re-blurring full-screen layers every frame is what TV hardware can't take. */
+        .container,
+        .widgets {
+            will-change: transform;
+            transition: transform 0.45s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        body.screen-moving .glass,
+        body.screen-moving .glass-panel {
+            -webkit-backdrop-filter: none;
+            backdrop-filter: none;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .container, .widgets, .hero-backdrop { transition: none; }
+        }
+
         body.show-widgets .container,
         body.show-widgets .hero-backdrop,
         body.show-widgets .widgets {
@@ -1172,7 +1190,8 @@
             outline: none;
             cursor: pointer;
             will-change: transform;
-            transition: transform 0.3s var(--ease-focus), box-shadow 0.3s ease;
+            /* Only the scale animates; the ring snaps on, since animating a shadow repaints every frame. */
+            transition: transform 0.2s var(--ease-focus);
         }
 
         .widget.wide { flex-grow: 2; }
@@ -1180,7 +1199,7 @@
         .widget:hover,
         .widget.focused {
             transform: scale(1.03);
-            box-shadow: 0 0 0 4px #f5f5f7, 0 24px 48px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 0 0 4px #f5f5f7;
             z-index: 20;
         }
 
@@ -1357,11 +1376,55 @@
             align-items: center;
             gap: 16px;
             border-top: 1px solid rgba(255, 255, 255, 0.12);
-            padding: 14px 0;
+            padding: 14px 12px;
+            border-radius: 14px;
         }
 
         .popup-list .news-item > div { min-width: 0; }
         .popup-list img { flex: 0 0 auto; width: 120px; height: 68px; object-fit: cover; border-radius: 10px; }
+
+        /* Readable rows (TabNews): a light glass step on focus, no animation. */
+        .popup-list .popup-nav { cursor: pointer; }
+        .popup-list .popup-nav.focused { background: rgba(255, 255, 255, 0.16); border-top-color: transparent; }
+
+        /* Article reader: ↑ ↓ scroll it from the remote. */
+        .popup-scroll {
+            max-height: 60vh;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+            padding-right: 8px;
+        }
+
+        .popup-scroll::-webkit-scrollbar { display: none; }
+
+        .reader-p,
+        .reader-li {
+            font-size: 22px;
+            line-height: 1.6;
+            color: rgba(245, 245, 247, 0.88);
+            margin-bottom: 18px;
+            max-width: 980px;
+        }
+
+        .reader-li { margin: -8px 0 12px 8px; }
+
+        .reader-h {
+            font-family: var(--font-display);
+            font-size: 28px;
+            font-weight: 600;
+            margin: 32px 0 14px;
+        }
+
+        .reader-code {
+            font-family: Menlo, Consolas, monospace;
+            font-size: 16px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            padding: 18px 22px;
+            margin-bottom: 18px;
+            border-radius: 14px;
+            background: rgba(0, 0, 0, 0.35);
+        }
     </style>
 </head>
 <body>
@@ -1589,7 +1652,7 @@
                 <div class="popup-title" id="popupTitle"></div>
             </div>
             <div id="popupBody"></div>
-            <button class="header-btn glass" id="closePopupBtn">Fechar</button>
+            <button class="header-btn glass popup-nav" id="closePopupBtn">Fechar</button>
         </div>
     </div>
 
@@ -2413,9 +2476,17 @@
             item.classList.add('focused');
             item.focus({ preventScroll: true });
             window.scrollTo(0, 0); // old engines ignore preventScroll; the widgets screen moves by transform, never by scroll
-            document.body.classList.toggle('show-widgets', !!item.closest('#widgets'));
+            var toWidgets = !!item.closest('#widgets');
+            if (toWidgets !== document.body.classList.contains('show-widgets')) {
+                // Blur off while the screens slide (see body.screen-moving), back on once they land.
+                document.body.classList.add('screen-moving');
+                clearTimeout(screenMoveTimer);
+                screenMoveTimer = setTimeout(function() { document.body.classList.remove('screen-moving'); }, 500);
+                document.body.classList.toggle('show-widgets', toWidgets);
+            }
             curIndex = mainNavItems.indexOf(item);
         }
+        var screenMoveTimer = null;
 
         // Pick text comes from TMDB/TVMaze (TVMaze is community-edited), so it is set as text, never HTML.
         function showHero(i) {
@@ -2987,7 +3058,7 @@
             cachedJson('tabnews', 'https://www.tabnews.com.br/api/v1/contents?strategy=relevant&per_page=8', 30)
                 .then(function(posts) {
                     widgetData.tabnews = posts.map(function(p) {
-                        return { title: p.title, meta: p.owner_username + ' · ' + p.tabcoins + ' tabcoins · ' + p.children_deep_count + ' comentários' };
+                        return { title: p.title, meta: p.owner_username + ' · ' + p.tabcoins + ' tabcoins · ' + p.children_deep_count + ' comentários', user: p.owner_username, slug: p.slug };
                     });
                     renderNews('tabnewsList', widgetData.tabnews);
                 })
@@ -3044,28 +3115,115 @@
             loadGames();
         }
 
-        function openWidgetPopup(kicker, title, body) {
+        // Inside the popup, the arrows walk the .popup-nav items (readable rows, then Fechar) and OK opens one.
+        // `back` is where the Back key goes instead of closing, e.g. from an article to the news list.
+        var popupNav = [];
+        var popupIndex = 0;
+        var popupBack = null;
+
+        function setPopupFocus(i) {
+            popupIndex = Math.max(0, Math.min(i, popupNav.length - 1));
+            popupNav.forEach(function(item, n) { item.classList.toggle('focused', n === popupIndex); });
+            popupNav[popupIndex].focus({ preventScroll: true });
+        }
+
+        function openWidgetPopup(kicker, title, body, back) {
             document.getElementById('popupKicker').textContent = kicker;
             document.getElementById('popupTitle').textContent = title;
             fillList(document.getElementById('popupBody'), [body]);
+            popupBack = back || null;
+            popupNav = toArray(widgetPopup.querySelectorAll('.popup-nav'));
             popupOpen = true;
             widgetPopup.classList.add('active');
-            closePopupBtn.classList.add('focused');
-            closePopupBtn.focus();
+            setPopupFocus(0);
         }
 
         function closeWidgetPopup() {
             popupOpen = false;
             widgetPopup.classList.remove('active');
-            closePopupBtn.classList.remove('focused');
+            popupNav.forEach(function(item) { item.classList.remove('focused'); });
             setMainFocus(mainNavItems[curIndex]);
         }
         closePopupBtn.addEventListener('click', closeWidgetPopup);
 
         function popupList(items) {
             var list = el('div', 'popup-list');
-            items.forEach(function(i) { list.appendChild(newsItem(i.title, i.meta, i.img)); });
+            items.forEach(function(i) {
+                var row = newsItem(i.title, i.meta, i.img);
+                if (i.open) {
+                    row.classList.add('popup-nav');
+                    row.addEventListener('click', i.open);
+                    row.addEventListener('mouseenter', function() { setPopupFocus(popupNav.indexOf(row)); });
+                }
+                list.appendChild(row);
+            });
             return list;
+        }
+
+        // Just enough Markdown for TabNews posts, rendered as text nodes: headings, lists, code blocks and
+        // paragraphs, with links reduced to their text and images dropped (no way to follow them on a TV).
+        function mdInline(text) {
+            return text.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\*\*|__|`/g, '').replace(/\*([^*\s][^*]*)\*/g, '$1').trim();
+        }
+
+        function markdownBlocks(md) {
+            var blocks = [];
+            var para = [];
+            var code = null;
+            function push(className, text) { if (text) blocks.push(el('div', className, text)); }
+            function flush() { push('reader-p', mdInline(para.join(' '))); para = []; }
+            md.split(/\r?\n/).forEach(function(line) {
+                if (/^\s*```/.test(line)) {
+                    if (code) { push('reader-code', code.join('\n')); code = null; } else { flush(); code = []; }
+                } else if (code) {
+                    code.push(line);
+                } else if (/^#{1,6}\s/.test(line)) {
+                    flush();
+                    push('reader-h', mdInline(line.replace(/^#+\s*/, '')));
+                } else if (/^\s*([-*+]|\d+\.)\s/.test(line)) {
+                    flush();
+                    push('reader-li', mdInline(line.replace(/^\s*[-*+]\s/, '• ')));
+                } else if (!line.trim()) {
+                    flush();
+                } else {
+                    para.push(line.replace(/^>\s?/, ''));
+                }
+            });
+            if (code) push('reader-code', code.join('\n'));
+            flush();
+            return blocks;
+        }
+        console.assert(mdInline('**a** [b](https://x) `c` *d* 2 * 3 ![i](https://y)') === 'a b c d 2 * 3', 'mdInline self-check failed');
+        console.assert(markdownBlocks('# T\n\nline one\nline two\n\n- item\n```\nx\n\ny\n```').map(function(b) { return b.className + ':' + b.textContent; }).join('|') ===
+            'reader-h:T|reader-p:line one line two|reader-li:• item|reader-code:x\n\ny', 'markdownBlocks self-check failed');
+
+        function openNewsPopup(focusIndex) {
+            // Interleaved so the two-column list reads TabNews on the left, Hacker News on the right.
+            // Only TabNews rows open: its API serves the whole post, Hacker News links out to other sites.
+            var items = [];
+            var readable = 0;
+            for (var i = 0; i < 6; i++) {
+                var tab = widgetData.tabnews && widgetData.tabnews[i];
+                var hn = widgetData.hn && widgetData.hn[i];
+                if (tab) items.push({ title: tab.title, meta: 'TabNews · ' + tab.meta, open: openArticle.bind(null, tab, readable++) });
+                if (hn) items.push({ title: hn.title, meta: 'Hacker News · ' + hn.meta });
+            }
+            if (!items.length) return;
+            openWidgetPopup('Notícias de tecnologia · OK para ler no TabNews', 'Em alta agora', popupList(items));
+            if (focusIndex) setPopupFocus(focusIndex);
+        }
+
+        function openArticle(post, listIndex) {
+            var body = el('div', 'popup-scroll');
+            body.appendChild(el('div', 'news-meta', 'Carregando…'));
+            openWidgetPopup('TabNews · ' + post.user, post.title, body, function() { openNewsPopup(listIndex); });
+            fetch('https://www.tabnews.com.br/api/v1/contents/' + encodeURIComponent(post.user) + '/' + encodeURIComponent(post.slug))
+                .then(function(res) {
+                    if (!res.ok) throw new Error('TabNews: HTTP ' + res.status);
+                    return res.json();
+                })
+                .then(function(content) { fillList(body, markdownBlocks(content.body || '')); })
+                .catch(function() { fillList(body, [el('div', 'news-meta', 'Não foi possível carregar a matéria')]); });
         }
 
         document.getElementById('wPhoto').addEventListener('click', function() {
@@ -3090,17 +3248,7 @@
             })));
         });
 
-        document.getElementById('wNews').addEventListener('click', function() {
-            // Interleaved so the two-column list reads TabNews on the left, Hacker News on the right.
-            var items = [];
-            for (var i = 0; i < 6; i++) {
-                var tab = widgetData.tabnews && widgetData.tabnews[i];
-                var hn = widgetData.hn && widgetData.hn[i];
-                if (tab) items.push({ title: tab.title, meta: 'TabNews · ' + tab.meta });
-                if (hn) items.push({ title: hn.title, meta: 'Hacker News · ' + hn.meta });
-            }
-            if (items.length) openWidgetPopup('Notícias de tecnologia', 'Em alta agora', popupList(items));
-        });
+        document.getElementById('wNews').addEventListener('click', function() { openNewsPopup(0); });
 
         document.getElementById('wGames').addEventListener('click', function() {
             if (!widgetData.games || !widgetData.games.length) return;
@@ -3326,7 +3474,8 @@
                     closeDrawer();
                     e.preventDefault();
                 } else if (popupOpen) {
-                    closeWidgetPopup();
+                    if (popupBack) popupBack();
+                    else closeWidgetPopup();
                     e.preventDefault();
                 } else if (document.body.classList.contains('show-widgets')) {
                     setMainFocus(document.querySelector('.app-tile'));
@@ -3335,12 +3484,24 @@
                 return;
             }
 
-            if (drawerOpen || popupOpen) {
+            if (drawerOpen) {
                 if (e.key === 'Enter') {
-                    if (drawerOpen) closeDrawer();
-                    else closeWidgetPopup();
+                    closeDrawer();
                     e.preventDefault();
                 }
+                return;
+            }
+
+            if (popupOpen) {
+                var scroller = widgetPopup.querySelector('.popup-scroll');
+                if (scroller && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                    scroller.scrollTop += e.key === 'ArrowDown' ? 180 : -180;
+                } else if (/^Arrow(Up|Down|Left|Right)$/.test(e.key)) {
+                    setPopupFocus(popupIndex + (e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : -1));
+                } else if (e.key === 'Enter') {
+                    popupNav[popupIndex].click();
+                } else return;
+                e.preventDefault();
                 return;
             }
 

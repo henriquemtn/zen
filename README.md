@@ -29,7 +29,7 @@ Zen é um fork do [**Free My TV for LG webOS**](https://github.com/danielthejoke
 - Imagem do dia do Wikimedia Commons, que também vira o fundo da tela.
 - Próximo lançamento de foguete com contagem regressiva ao vivo (Launch Library 2).
 - Dólar, euro e bitcoin com a variação do dia (AwesomeAPI).
-- Notícias de tecnologia do TabNews e do Hacker News.
+- Notícias de tecnologia do TabNews e do Hacker News. As matérias do TabNews abrem inteiras dentro do Zen, e ↑ ↓ rolam o texto.
 - Jogos grátis agora na Epic, Steam, GOG, PS5 e Xbox (GamerPower).
 - O OK abre os detalhes. Nada precisa de chave, e um cache local respeita os limites das APIs e mantém os últimos dados quando a rede cai.
 
