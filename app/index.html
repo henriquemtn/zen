@@ -6,7 +6,6 @@
     <title>Zen</title>
     <script src="webOSTV.js"></script>
     <script src="env.js"></script>
-    <script src="assets/vendor/motion.js"></script>
     <style>
         /* Zen design tokens, adapted from DESIGN.md (Apple). Type sizes are scaled
            up ~1.5x from the web spec so they read from a sofa at 1080p. */
@@ -304,7 +303,7 @@
             background-color: #1d1d1f;
             background-size: cover;
             background-position: center 20%;
-            transition: background-image 0.6s ease, transform 0.6s var(--ease-focus);
+            transition: background-image 0.6s ease;
             z-index: 0;
         }
 
@@ -905,7 +904,6 @@
         .toast-msg {
             position: fixed;
             top: 32px;
-            /* Centered without a CSS transform, so Motion's y animation doesn't fight it. */
             left: 0;
             right: 0;
             margin: 0 auto;
@@ -1120,13 +1118,8 @@
             color: rgba(245, 245, 247, 0.7);
         }
 
-        /* Widgets: a second full screen parked below the home. ↓ from the dock slides
-           everything up one screen; transforms (not scrolling) so it animates on old webOS. */
-        .container,
-        .widgets {
-            transition: transform 0.6s var(--ease-focus);
-        }
-
+        /* Widgets: a second full screen parked below the home. ↓ from the dock shifts everything up one
+           screen at once: animating full-screen glass layers is too heavy for TV hardware. */
         body.show-widgets .container,
         body.show-widgets .hero-backdrop,
         body.show-widgets .widgets {
@@ -1811,32 +1804,8 @@
         function showToast(msg, duration) {
             toastEl.textContent = msg;
             toastEl.style.display = 'block';
-            if (window.Motion) Motion.animate(toastEl, { opacity: [0, 1], y: [-16, 0] }, { type: 'spring', bounce: 0.3, duration: 0.4 });
             clearTimeout(window._toastTimer);
             window._toastTimer = setTimeout(function() { toastEl.style.display = 'none'; }, duration || 2400);
-        }
-
-        // Popups spring in/out with Motion (assets/vendor/motion.js, MIT). `hidden` is the
-        // panel's off state, e.g. { opacity: 0, scale: 0.94 } or { x: '100%' }. Old engines
-        // that can't load Motion just show/hide the popup instantly.
-        function animatePopup(backdrop, panel, show, hidden) {
-            backdrop._open = show;
-            if (show) backdrop.classList.add('active');
-            if (!window.Motion) {
-                if (!show) backdrop.classList.remove('active');
-                return;
-            }
-            var frames = {};
-            Object.keys(hidden).forEach(function(k) {
-                var on = (k === 'opacity' || k === 'scale') ? 1 : 0;
-                frames[k] = show ? [hidden[k], on] : [on, hidden[k]];
-            });
-            Motion.animate(backdrop, { opacity: show ? [0, 1] : [1, 0] }, { duration: show ? 0.25 : 0.2 });
-            Motion.animate(panel, frames, show ? { type: 'spring', bounce: 0.22, duration: 0.5 } : { duration: 0.2 })
-                .then(function() {
-                    // Skip if the popup was reopened while this close animation ran.
-                    if (!backdrop._open) backdrop.classList.remove('active');
-                });
         }
 
         // --- Theme Engine ---
@@ -2614,7 +2583,7 @@
             document.getElementById('cfgTmdbKey').value = state.tmdbKey;
 
             renderAppSelectorGrid();
-            animatePopup(settingsModal, settingsModal.querySelector('.modal-box'), true, MODAL_HIDDEN);
+            settingsModal.classList.add('active');
             showSettingsPane('apps');
             setModalFocus(sideItem('apps'));
         }
@@ -2677,10 +2646,9 @@
             });
         }
 
-        var MODAL_HIDDEN = { opacity: 0, scale: 0.94 };
         function closeSettingsModal() {
             modalOpen = false;
-            animatePopup(settingsModal, settingsModal.querySelector('.modal-box'), false, MODAL_HIDDEN);
+            settingsModal.classList.remove('active');
             setMainFocus(mainNavItems[curIndex]);
         }
 
@@ -2749,8 +2717,6 @@
             toArray(settingsModal.querySelectorAll('.pane')).forEach(function(p) { p.hidden = p.dataset.pane !== name; });
             toArray(settingsModal.querySelectorAll('.side-item')).forEach(function(s) { s.classList.toggle('active', s.dataset.pane === name); });
             settingsModal.querySelector('.settings-scroll').scrollTop = 0;
-            var pane = settingsModal.querySelector('.pane[data-pane="' + name + '"]');
-            if (window.Motion) Motion.animate(pane, { x: [24, 0], opacity: [0, 1] }, { duration: 0.25 });
             modalNavItems = collectModalNav();
         }
         toArray(settingsModal.querySelectorAll('.side-item')).forEach(function(item) {
@@ -2876,14 +2842,14 @@
         function openDrawer() {
             if (shelfEdit) return;
             drawerOpen = true;
-            animatePopup(weatherDrawer, weatherDrawer.querySelector('.weather-panel'), true, MODAL_HIDDEN);
+            weatherDrawer.classList.add('active');
             closeDrawerBtn.classList.add('focused');
             closeDrawerBtn.focus();
         }
 
         function closeDrawer() {
             drawerOpen = false;
-            animatePopup(weatherDrawer, weatherDrawer.querySelector('.weather-panel'), false, MODAL_HIDDEN);
+            weatherDrawer.classList.remove('active');
             closeDrawerBtn.classList.remove('focused');
             setMainFocus(mainNavItems[curIndex]);
         }
@@ -3083,14 +3049,14 @@
             document.getElementById('popupTitle').textContent = title;
             fillList(document.getElementById('popupBody'), [body]);
             popupOpen = true;
-            animatePopup(widgetPopup, widgetPopup.querySelector('.widget-panel'), true, MODAL_HIDDEN);
+            widgetPopup.classList.add('active');
             closePopupBtn.classList.add('focused');
             closePopupBtn.focus();
         }
 
         function closeWidgetPopup() {
             popupOpen = false;
-            animatePopup(widgetPopup, widgetPopup.querySelector('.widget-panel'), false, MODAL_HIDDEN);
+            widgetPopup.classList.remove('active');
             closePopupBtn.classList.remove('focused');
             setMainFocus(mainNavItems[curIndex]);
         }
