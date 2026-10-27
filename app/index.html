@@ -2251,7 +2251,8 @@
         var shelfEdit = null;
         var movingTileId = null;
         var pendingLaunch = null;
-        function launchApp(appId) {
+        // `params` goes to the app as its launch params, e.g. { target: url } for the browser.
+        function launchApp(appId, params) {
             if (shelfEdit || pendingLaunch) return; // Ignore repeated remote presses while a request is pending.
             var app = arrFind(state.catalog, function(item) { return item.id === appId; });
             var title = app ? (devicePreset(app, state.hdmiDevices).title || app.title) : appId;
@@ -2281,7 +2282,8 @@
             function fallback(originalError) {
                 if (pendingLaunch !== request) return;
                 // Only known app-ID characters may enter the legacy shell-based fallback.
-                if (!/^[a-zA-Z0-9._-]+$/.test(appId)) { failure(originalError); return; }
+                // Launch params never go through the shell either, so a launch that needs them can't fall back.
+                if (params || !/^[a-zA-Z0-9._-]+$/.test(appId)) { failure(originalError); return; }
                 try {
                     webOS.service.request('luna://org.webosbrew.hbchannel.service', {
                         method: 'exec',
@@ -2306,7 +2308,7 @@
             try {
                 webOS.service.request('luna://com.webos.applicationManager', {
                     method: 'launch',
-                    parameters: { id: appId },
+                    parameters: params ? { id: appId, params: params } : { id: appId },
                     onSuccess: function(result) {
                         if (pendingLaunch !== request) return;
                         if (result && result.returnValue === false) fallback(result);
@@ -2962,7 +2964,8 @@
             return node;
         }
 
-        function safeImg(url) { return url && /^https:\/\/[^\s"'()\\]+$/.test(url) ? url : ''; }
+        // Third-party URLs: only plain https ones may reach an img src, a CSS url() or the browser.
+        function safeUrl(url) { return url && /^https:\/\/[^\s"'()\\]+$/.test(url) ? url : ''; }
 
         function fillList(container, nodes) {
             container.innerHTML = '';
@@ -2997,7 +3000,7 @@
                     var photo = feed.image;
                     if (!photo || !photo.thumbnail) throw new Error('no picture of the day');
                     // The feed's thumbnail is 960px; Commons serves the same file at 1920px for the TV.
-                    var img = safeImg(photo.thumbnail.source.replace(/\/\d+px-/, '/1920px-'));
+                    var img = safeUrl(photo.thumbnail.source.replace(/\/\d+px-/, '/1920px-'));
                     widgetData.photo = photo;
                     document.getElementById('photoTitle').textContent = photo.description ? photo.description.text : '';
                     if (!img) return;
@@ -3017,7 +3020,7 @@
                     if (!next) return widgetError('launchName', 'Nenhum lançamento marcado');
                     document.getElementById('launchName').textContent = next.mission || next.name;
                     document.getElementById('launchSub').textContent = next.name.split(' | ')[0] + ' · ' + next.lsp_name;
-                    var img = safeImg(next.image);
+                    var img = safeUrl(next.image);
                     if (img) document.getElementById('launchImg').src = img;
                     tickLaunch();
                 })
@@ -3066,7 +3069,9 @@
             cachedJson('hn', 'https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=8', 30)
                 .then(function(data) {
                     widgetData.hn = data.hits.map(function(h) {
-                        return { title: h.title, meta: h.points + ' pontos · ' + h.num_comments + ' comentários' };
+                        // Ask HN posts have no link of their own; their HN page is the story.
+                        var url = safeUrl(h.url) || 'https://news.ycombinator.com/item?id=' + encodeURIComponent(h.objectID);
+                        return { title: h.title, meta: h.points + ' pontos · ' + h.num_comments + ' comentários', url: url };
                     });
                     renderNews('hnList', widgetData.hn);
                 })
@@ -3084,7 +3089,7 @@
                             title: g.title.replace(/\s*\([^)]*\)\s*(Key\s+)?Giveaway$/i, ''),
                             worth: g.worth !== 'N/A' ? g.worth : '',
                             info: [store ? store[1] : g.platforms, until ? 'até ' + until[2] + '/' + until[1] : ''].filter(Boolean).join(' · '),
-                            img: safeImg(g.thumbnail)
+                            img: safeUrl(g.thumbnail)
                         };
                     });
                     if (!widgetData.games.length) return widgetError('gameRow', 'Nenhum jogo grátis agora');
@@ -3199,17 +3204,17 @@
 
         function openNewsPopup(focusIndex) {
             // Interleaved so the two-column list reads TabNews on the left, Hacker News on the right.
-            // Only TabNews rows open: its API serves the whole post, Hacker News links out to other sites.
+            // TabNews posts open in the reader (its API serves the whole post); Hacker News stories live
+            // on other sites, so they open in the TV's browser.
             var items = [];
-            var readable = 0;
             for (var i = 0; i < 6; i++) {
                 var tab = widgetData.tabnews && widgetData.tabnews[i];
                 var hn = widgetData.hn && widgetData.hn[i];
-                if (tab) items.push({ title: tab.title, meta: 'TabNews · ' + tab.meta, open: openArticle.bind(null, tab, readable++) });
-                if (hn) items.push({ title: hn.title, meta: 'Hacker News · ' + hn.meta });
+                if (tab) items.push({ title: tab.title, meta: 'TabNews · ' + tab.meta, open: openArticle.bind(null, tab, items.length) });
+                if (hn) items.push({ title: hn.title, meta: 'Hacker News · ' + hn.meta, open: launchApp.bind(null, 'com.webos.app.browser', { target: hn.url }) });
             }
             if (!items.length) return;
-            openWidgetPopup('Notícias de tecnologia · OK para ler no TabNews', 'Em alta agora', popupList(items));
+            openWidgetPopup('Notícias de tecnologia · OK abre a matéria', 'Em alta agora', popupList(items));
             if (focusIndex) setPopupFocus(focusIndex);
         }
 
@@ -3244,7 +3249,7 @@
             if (!widgetData.launches || !widgetData.launches.length) return;
             openWidgetPopup('Próximos lançamentos', 'Agenda de foguetes', popupList(widgetData.launches.map(function(l) {
                 var when = new Date(Date.parse(l.net)).toLocaleString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-                return { title: l.mission || l.name, meta: when + ' · ' + l.name.split(' | ')[0] + ' · ' + l.location, img: safeImg(l.image) };
+                return { title: l.mission || l.name, meta: when + ' · ' + l.name.split(' | ')[0] + ' · ' + l.location, img: safeUrl(l.image) };
             })));
         });
 
@@ -3497,7 +3502,9 @@
                 if (scroller && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
                     scroller.scrollTop += e.key === 'ArrowDown' ? 180 : -180;
                 } else if (/^Arrow(Up|Down|Left|Right)$/.test(e.key)) {
-                    setPopupFocus(popupIndex + (e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : -1));
+                    // Rows sit in two columns, so ↑ ↓ jump a whole row (two items) and ← → move across.
+                    var rowStep = (e.key === 'ArrowUp' || e.key === 'ArrowDown') && widgetPopup.querySelector('.popup-list .popup-nav') ? 2 : 1;
+                    setPopupFocus(popupIndex + (e.key === 'ArrowDown' || e.key === 'ArrowRight' ? rowStep : -rowStep));
                 } else if (e.key === 'Enter') {
                     popupNav[popupIndex].click();
                 } else return;
