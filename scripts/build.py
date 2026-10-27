@@ -85,6 +85,8 @@ def _fix_ipk_timestamps(ipk_path):
 def build():
     os.makedirs(DIST_DIR, exist_ok=True)
     app_id, version = read_appinfo()
+    # Bake .env into app/env.js; check=True so a missing node fails the build instead of shipping without the key.
+    subprocess.run(["node", os.path.join(REPO_DIR, "scripts", "env.js")], check=True)
     print(f"[*] Packaging Free My TV from {APP_DIR}...")
     ipk_path = os.path.join(DIST_DIR, ipk_filename(app_id, version))
 

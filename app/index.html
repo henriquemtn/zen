@@ -3,32 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Free My TV</title>
+    <title>Zen</title>
     <script src="webOSTV.js"></script>
+    <script src="env.js"></script>
+    <script src="assets/vendor/motion.js"></script>
     <style>
-        :root {
-            --bg-gradient: radial-gradient(circle at 50% -10%, #171d33 0%, #0a0e1a 55%, #04060a 100%);
-            --glass-shelf: rgba(255, 255, 255, 0.07);
-            --glass-border: rgba(255, 255, 255, 0.13);
-            --glass-focus-border: rgba(255, 255, 255, 0.95);
-            --text-primary: #f5f5f7;
-            --text-secondary: rgba(245, 245, 247, 0.65);
-            --accent: #0a84ff;
+        /* Zen design tokens, adapted from DESIGN.md (Apple). Type sizes are scaled
+           up ~1.5x from the web spec so they read from a sofa at 1080p. */
+        @font-face {
+            font-family: 'Inter';
+            src: url('assets/fonts/inter-latin-wght.woff2') format('woff2');
+            font-weight: 100 900;
+            font-display: swap;
         }
 
+        /* Default (Night): flat dark surfaces, tvOS-style. */
+        :root {
+            --canvas: #000000;
+            --surface: #1d1d1f;
+            --surface-2: #2c2c2e;
+            --hairline: #3a3a3c;
+            --text-primary: #f5f5f7;
+            --text-secondary: #86868b;
+            --accent: #2997ff;
+            --button-fill: #0071e3;
+            --focus-ring: #f5f5f7;
+            --overlay: rgba(0, 0, 0, 0.72);
+            --font-display: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+            --font-text: 'Inter', 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+            --radius-card: 28px;
+            --radius-tile: 24px;
+            --radius-pill: 9999px;
+            --ease-focus: cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        /* Day: the light gallery palette straight from DESIGN.md. */
         body.theme-day {
-            --bg-gradient: radial-gradient(circle at 50% -10%, #2b4c7e 0%, #152744 55%, #091326 100%);
-            --glass-shelf: rgba(255, 255, 255, 0.11);
+            --canvas: #f5f5f7;
+            --surface: #ffffff;
+            --surface-2: #e6e6e8;
+            --hairline: #d6d6d6;
+            --text-primary: #1d1d1f;
+            --text-secondary: #707070;
+            --accent: #0066cc;
+            --focus-ring: #1d1d1f;
+            --overlay: rgba(245, 245, 247, 0.8);
         }
 
         body.theme-sunset {
-            --bg-gradient: radial-gradient(circle at 50% -10%, #4a2138 0%, #1e132a 55%, #08060c 100%);
+            --canvas: #0d0a08;
+            --surface: #1f1a17;
+            --surface-2: #2e2723;
+            --hairline: #3d342e;
             --accent: #ff9f0a;
         }
 
         body.theme-oled {
-            --bg-gradient: radial-gradient(circle at 50% -10%, #0a0c12 0%, #000000 60%, #000000 100%);
-            --glass-shelf: rgba(255, 255, 255, 0.04);
+            --surface: #000000;
+            --surface-2: #121212;
+            --hairline: #2c2c2e;
         }
 
         * {
@@ -42,33 +75,15 @@
         body {
             width: 100vw;
             height: 100vh;
-            background: var(--bg-gradient);
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--canvas);
+            font-family: var(--font-text);
             color: var(--text-primary);
+            -webkit-font-smoothing: antialiased;
             overflow: hidden;
             display: flex;
             flex-direction: column;
             position: relative;
-            transition: background 1.2s ease;
-        }
-
-        /* Ambient Dynamic Glow */
-        .ambient-glow {
-            position: absolute;
-            top: -15%;
-            left: 25%;
-            width: 50%;
-            height: 50%;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(10, 132, 255, 0.18) 0%, rgba(0, 0, 0, 0) 70%);
-            filter: blur(60px);
-            pointer-events: none;
-            /* Only opacity/transform animate (compositor-only). The gradient color itself
-               snaps instantly on focus change so the GPU never re-blurs mid-transition
-               while rapidly navigating with the remote's D-Pad. */
-            transition: opacity 0.35s ease;
-            will-change: opacity;
-            z-index: 1;
+            transition: background-color 0.6s ease, color 0.6s ease;
         }
 
         .container {
@@ -77,224 +92,416 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
-            padding: 34px 54px;
-            justify-content: space-between;
+            /* tvOS safe area at 1080p: 60px top/bottom, 80px sides. */
+            padding: 60px 80px;
+            gap: 28px;
         }
 
-        /* Top Bar */
+        /* Top Bar: clock left, tab bar centered, weather + actions right.
+           It floats over the backdrop photo, so its text is white in every theme. */
         header {
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            color: #f5f5f7;
         }
 
-        .brand-group {
+        /* tvOS 26 Liquid Glass: translucent blur with a bright specular top edge.
+           On engines without backdrop-filter it degrades to plain translucency. */
+        .glass,
+        .glass.header-btn {
+            background: rgba(255, 255, 255, 0.14);
+            -webkit-backdrop-filter: blur(30px) saturate(180%);
+            backdrop-filter: blur(30px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+            color: #f5f5f7;
+        }
+
+        .glass.header-btn:hover,
+        .glass.header-btn:focus,
+        .glass.header-btn.focused,
+        .glass.weather-widget:hover,
+        .glass.weather-widget.focused {
+            background: rgba(255, 255, 255, 0.92);
+            border-color: rgba(255, 255, 255, 0.92);
+            color: #1d1d1f;
+            transform: scale(1.08);
+        }
+
+        .glass.weather-widget.focused .weather-sub,
+        .glass.weather-widget:hover .weather-sub {
+            color: rgba(29, 29, 31, 0.6);
+        }
+
+        .tab-bar {
             display: flex;
-            align-items: center;
-            gap: 14px;
+            gap: 4px;
+            padding: 6px;
+            border-radius: var(--radius-pill);
         }
 
-        .brand-logo {
-            width: 34px;
-            height: 34px;
-            border-radius: 10px;
-            background: linear-gradient(135deg, #0a84ff, #0050c8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 15px rgba(10, 132, 255, 0.4);
-        }
-
-        .brand-logo svg {
-            width: 19px;
-            height: 19px;
-            fill: #ffffff;
-        }
-
-        .brand-title {
-            font-size: 24px;
-            font-weight: 700;
-            letter-spacing: -0.6px;
-        }
-
-        .tag-pill {
-            font-size: 11px;
+        .picks-tab {
+            background: transparent;
+            border: none;
+            color: rgba(245, 245, 247, 0.75);
+            font-family: var(--font-text);
+            font-size: 18px;
             font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            background: rgba(48, 209, 88, 0.15);
-            color: #30d158;
-            border: 1px solid rgba(48, 209, 88, 0.3);
-            padding: 4px 10px;
-            border-radius: 12px;
+            letter-spacing: -0.2px;
+            padding: 10px 30px;
+            border-radius: var(--radius-pill);
+            cursor: pointer;
+            outline: none;
+            will-change: transform;
+            transition: transform 0.25s var(--ease-focus), background-color 0.2s ease, color 0.2s ease;
+        }
+
+        .picks-tab.active {
+            color: #f5f5f7;
+            background: rgba(255, 255, 255, 0.22);
+        }
+
+        .picks-tab:hover,
+        .picks-tab:focus,
+        .picks-tab.focused {
+            color: #1d1d1f;
+            background: rgba(255, 255, 255, 0.92);
+            transform: scale(1.06);
+        }
+
+        header .clock-group,
+        .header-info {
+            flex: 1;
         }
 
         .header-info {
             display: flex;
+            justify-content: flex-end;
             align-items: center;
-            gap: 20px;
+            gap: 16px;
         }
 
+        .icon-btn.header-btn {
+            width: 60px;
+            height: 60px;
+            padding: 0;
+            justify-content: center;
+        }
+
+        .icon-btn svg {
+            flex-shrink: 0;
+            width: 28px;
+            height: 28px;
+            fill: currentColor;
+        }
+
+        /* Outlined pill */
         .header-btn {
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 14px;
-            font-weight: 600;
+            font-family: var(--font-text);
+            font-size: 18px;
+            font-weight: 500;
+            letter-spacing: -0.2px;
             color: var(--text-primary);
-            background: rgba(255, 255, 255, 0.07);
-            backdrop-filter: blur(14px);
-            padding: 8px 16px;
-            border-radius: 16px;
-            border: 1.5px solid var(--glass-border);
+            background: transparent;
+            padding: 10px 24px;
+            border-radius: var(--radius-pill);
+            border: 1.5px solid var(--hairline);
             cursor: pointer;
             outline: none;
             will-change: transform;
-            transition: transform 0.22s cubic-bezier(0.3, 1.4, 0.5, 1), background 0.2s ease, border-color 0.2s ease;
+            transition: transform 0.25s var(--ease-focus), background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
         }
 
         .header-btn:hover,
         .header-btn:focus,
         .header-btn.focused {
-            background: rgba(255, 255, 255, 0.2);
-            border-color: var(--glass-focus-border);
+            background: var(--text-primary);
+            color: var(--canvas);
+            border-color: var(--text-primary);
             transform: scale(1.06);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
         }
 
         .weather-widget {
             display: flex;
             align-items: center;
-            gap: 10px;
-            font-size: 15px;
-            color: var(--text-primary);
-            background: rgba(255, 255, 255, 0.07);
-            backdrop-filter: blur(14px);
-            padding: 7px 16px;
-            border-radius: 16px;
-            border: 1.5px solid var(--glass-border);
+            gap: 12px;
+            height: 60px;
+            font-size: 18px;
+            font-weight: 500;
+            padding: 0 24px 0 18px;
+            border-radius: var(--radius-pill);
             cursor: pointer;
             will-change: transform;
-            transition: transform 0.22s cubic-bezier(0.3, 1.4, 0.5, 1), background 0.2s ease, border-color 0.2s ease;
+            transition: transform 0.25s var(--ease-focus), background-color 0.2s ease, color 0.2s ease;
         }
 
-        .weather-widget:hover,
-        .weather-widget.focused {
-            background: rgba(255, 255, 255, 0.18);
-            border-color: var(--glass-focus-border);
-            transform: scale(1.05);
+        /* Font Awesome weather glyphs: sized by the container's font-size, colored by its text. */
+        .wx-icon {
+            width: 1.25em;
+            height: 1em;
+            fill: currentColor;
+            vertical-align: middle;
+        }
+
+        .weather-widget .wx {
+            font-size: 24px;
+            line-height: 1;
+        }
+
+        /* Widget reads: icon, big temperature, then condition over city. */
+        .weather-temp {
+            font-family: var(--font-display);
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .weather-cond {
+            font-size: 14px;
+            font-weight: 600;
+            line-height: 1.2;
         }
 
         .weather-sub {
-            font-size: 12px;
-            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 400;
+            line-height: 1.2;
+            color: rgba(245, 245, 247, 0.7);
         }
 
         .clock-group {
             display: flex;
             align-items: baseline;
-            gap: 14px;
+            gap: 16px;
         }
 
         .clock {
-            font-size: 30px;
-            font-weight: 300;
+            font-family: var(--font-display);
+            font-size: 28px;
+            font-weight: 500;
             letter-spacing: -0.5px;
-            color: #ffffff;
+            font-variant-numeric: tabular-nums;
         }
 
         .date {
-            font-size: 15px;
+            font-size: 20px;
             font-weight: 400;
             color: var(--text-secondary);
         }
 
-        /* Top Shelf Hero Details */
-        .hero-shelf {
-            height: 140px;
+        /* Full-bleed top shelf: the backdrop covers the top ~2/3 of the screen
+           edge to edge, behind the header, and fades into the canvas. */
+        .hero-backdrop {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 100vh;
+            background-color: #1d1d1f;
+            background-size: cover;
+            background-position: center 20%;
+            transition: background-image 0.6s ease;
+            z-index: 0;
+        }
+
+        /* shortcut: legibility scrims are the one gradient DESIGN.md's "no gradients" rule tolerates; drop them if text moves off the photo. */
+        .hero-backdrop::before,
+        .hero-backdrop::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+        }
+
+        /* Bottom darkening only (not a fade to solid) so the photo still shows
+           through the glass dock; the left/top scrim sits on top for the title. */
+        /* Black shadow rising from the bottom, so the dock and dots sit on a dark base. */
+        .hero-backdrop::before {
+            top: auto;
+            height: 65%;
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.55) 45%, rgba(0, 0, 0, 0.88) 100%);
+        }
+
+        .hero-backdrop::after {
+            background: linear-gradient(90deg, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.25) 50%, rgba(0, 0, 0, 0) 75%),
+                        linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0) 22%);
+        }
+
+        /* The banner itself is just the focusable text area over the backdrop. */
+        .hero-banner {
+            flex: 1;
+            min-height: 0;
+            position: relative;
             display: flex;
-            flex-direction: column;
-            justify-content: center;
-            transition: all 0.3s ease;
+            align-items: flex-end;
+            /* Room under the text for the centered dots row. */
+            padding-bottom: 96px;
+            outline: none;
+            color: #f5f5f7;
+            cursor: pointer;
+        }
+
+        .hero-content {
+            max-width: 1000px;
+        }
+
+        /* Carousel control: same Liquid Glass capsule and height as the tab bar */
+        .hero-dots {
+            position: absolute;
+            left: 50%;
+            bottom: 24px;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            height: 48px;
+            padding: 0 22px;
+            border-radius: var(--radius-pill);
+            transition: transform 0.25s var(--ease-focus), background-color 0.2s ease;
+        }
+
+        .hero-dots span {
+            position: relative;
+            overflow: hidden;
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.4);
+            /* The width transition is the "slide to the next dot" motion. */
+            transition: width 0.45s var(--ease-focus), background-color 0.2s ease;
+        }
+
+        .hero-dots span.active {
+            width: 44px;
+            background: rgba(255, 255, 255, 0.35);
+        }
+
+        /* Progress fill: its 8s run IS the carousel timer (animationend advances the slide). */
+        .hero-dots span.active::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            border-radius: 5px;
+            background: #ffffff;
+            -webkit-transform-origin: left center;
+            transform-origin: left center;
+            -webkit-animation: dot-fill 8s linear forwards;
+            animation: dot-fill 8s linear forwards;
+        }
+
+        @-webkit-keyframes dot-fill { from { -webkit-transform: scaleX(0); } to { -webkit-transform: scaleX(1); } }
+        @keyframes dot-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+        /* Focused carousel: the glass control lights up and the timer holds, like tvOS. */
+        .hero-banner.focused .hero-dots,
+        .hero-banner:hover .hero-dots {
+            background: rgba(255, 255, 255, 0.92);
+            transform: translateX(-50%) scale(1.12);
+        }
+
+        .hero-banner.focused .hero-dots span.active::after,
+        .hero-banner:hover .hero-dots span.active::after {
+            -webkit-animation-play-state: paused;
+            animation-play-state: paused;
+        }
+
+        .hero-banner.focused .hero-dots span { background: rgba(29, 29, 31, 0.25); }
+        .hero-banner.focused .hero-dots span.active::after { background: #1d1d1f; }
+
+        .hero-banner .hero-desc {
+            color: rgba(245, 245, 247, 0.78);
+        }
+
+        /* Minimal top-shelf text, tvOS order: title, then a quiet metadata line, then the description.
+           The whole screen uses four sizes: 48 title / 28 clock+temp / 18 body / 14 notes. */
+        .hero-title {
+            font-family: var(--font-display);
+            font-size: 48px;
+            font-weight: 600;
+            letter-spacing: -0.8px;
+            line-height: 1.08;
+            margin-bottom: 8px;
         }
 
         .hero-tag {
-            font-size: 13px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            color: var(--accent);
-            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 28px;
+            font-size: 18px;
+            font-weight: 500;
+            color: rgba(245, 245, 247, 0.7);
+            margin-bottom: 10px;
         }
 
-        .hero-title {
-            font-size: 40px;
-            font-weight: 700;
-            letter-spacing: -1px;
-            margin-bottom: 6px;
-            line-height: 1.1;
+        /* Streaming service app icons from TMDB, after the rating. */
+        .provider-logo {
+            width: 28px;
+            height: 28px;
+            border-radius: 7px;
         }
+
+        .provider-logo:first-of-type { margin-left: 6px; }
 
         .hero-desc {
-            font-size: 16px;
+            font-size: 18px;
             font-weight: 400;
+            letter-spacing: -0.2px;
             color: var(--text-secondary);
-            max-width: 820px;
-            line-height: 1.4;
+            max-width: 680px;
+            line-height: 1.45;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
 
-        /* Glass App Shelf */
-        .shelf-wrapper {
-            background: var(--glass-shelf);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
-            border: 1px solid var(--glass-border);
-            border-radius: 28px;
-            padding: 20px 26px;
-            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
-        }
-
+        /* App Shelf: bare row of tvOS icons; the top bar only shows while reordering */
         .shelf-top-bar {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin-bottom: 14px;
-        }
-
-        .shelf-header {
-            font-size: 14px;
-            font-weight: 700;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
+            gap: 16px;
+            margin-bottom: 20px;
         }
 
         .shelf-hint {
-            font-size: 13px;
+            flex: 1;
+            font-size: 18px;
             color: var(--text-secondary);
         }
 
-        .shelf-grid {
-            /* Flexbox fallback for engines without CSS Grid (e.g. webOS 3.x /
-               Chromium 38); the display: grid line below overrides it on any
-               engine that understands grid, since it comes later in the cascade. */
-            display: flex;
-            flex-wrap: wrap;
-            display: grid;
-            grid-template-columns: repeat(8, 1fr);
-            gap: 18px;
+        /* iPhone-style dock: a centered glass slab sized to its icons, sitting
+           over the backdrop photo so the blur has something to blur. */
+        .shelf-wrapper {
+            align-self: center;
+            padding: 20px 24px;
+            border-radius: 40px;
         }
 
+        .shelf-grid {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        /* tvOS-style icon: 5:3 full-bleed brand card, name appears below only on focus */
         .app-tile {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1.5px solid rgba(255, 255, 255, 0.1);
-            border-radius: 22px;
-            aspect-ratio: 1 / 1;
-            flex: 0 0 calc((100% - 18px * 7) / 8);
+            background: var(--surface-2);
+            border: none;
+            border-radius: 20px;
+            aspect-ratio: 5 / 3;
+            /* Fixed size instead of aspect-ratio, which older webOS engines lack. */
+            flex: 0 0 160px;
+            height: 96px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -303,27 +510,28 @@
             cursor: pointer;
             outline: none;
             position: relative;
+            color: var(--text-primary);
+            font-family: var(--font-text);
             will-change: transform;
-            transition: transform 0.28s cubic-bezier(0.3, 1.4, 0.5, 1), border-color 0.2s ease, background 0.2s ease;
+            transition: transform 0.3s var(--ease-focus), box-shadow 0.3s ease;
             transform: scale(1) translateZ(0);
             padding: 0;
         }
 
+        /* tvOS focus: lift + soft shadow + name. The shadow is the one DESIGN.md
+           exception, borrowed from Apple TV itself so focus reads from the sofa. */
         .app-tile:hover,
         .app-tile:focus,
         .app-tile.focused {
-            transform: scale(1.04) translateY(-4px) translateZ(0);
-            border-color: var(--glass-focus-border);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7), 0 0 25px rgba(255, 255, 255, 0.25);
+            transform: scale(1.12) translateZ(0);
+            box-shadow: 0 18px 36px rgba(0, 0, 0, 0.45);
             z-index: 20;
-            background: rgba(255, 255, 255, 0.17);
         }
 
         .app-icon {
             width: 100%;
-            flex: 1;
-            min-height: 0;
-            border-radius: 20px 20px 0 0;
+            height: 100%;
+            border-radius: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -338,174 +546,45 @@
             height: 100%;
             object-fit: contain;
         }
-        .app-icon img.tile-brand-logo { width: 76%; height: 76%; }
+        .app-icon img.tile-brand-logo { width: 58%; height: 52%; }
+        /* Optical size: this wordmark sits in a thin band of its square viewBox, so it needs more room. */
+        .app-icon img.tile-brand-logo[src$="primevideo.svg"] { width: 78%; height: 78%; }
         .app-art-fallback {
-            font-size: 25px;
-            font-weight: 800;
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: -0.3px;
             color: #fff;
             text-align: center;
             padding: 12px;
             overflow-wrap: break-word;
             max-width: 100%;
         }
+        /* Names stay hidden (logos speak for themselves) except on HDMI tiles,
+           where the name sits inside the tile under a raised icon. */
         .app-label {
+            display: none;
+        }
+
+        .app-tile.has-label .app-label {
+            display: block;
+            position: absolute;
+            bottom: 8px;
+            left: 0;
             width: 100%;
-            padding: 12px 8px;
-            font-size: 15px;
+            padding: 0 8px;
+            font-size: 14px;
             font-weight: 600;
-            color: var(--text-primary);
+            letter-spacing: -0.2px;
+            color: #ffffff;
             text-align: center;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        .hdmi-options {
-            /* Flexbox fallback for engines without CSS Grid; display: grid
-               below overrides it on any engine that understands grid. */
-            display: flex;
-            flex-wrap: wrap;
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-        }
 
-        .hdmi-options .app-toggle-item {
-            flex: 0 0 calc((100% - 12px) / 2);
-        }
-
-        /* Trending Picks Row */
-        .picks-section {
-            margin-top: 6px;
-        }
-
-        .picks-top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-
-        .picks-header {
-            font-size: 14px;
-            font-weight: 700;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-            color: var(--text-secondary);
-        }
-
-        .picks-source-badge {
-            font-size: 12px;
-            color: var(--text-secondary);
-        }
-
-        .picks-tabs {
-            display: flex;
-            gap: 8px;
-        }
-
-        .picks-tab {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1.5px solid var(--glass-border);
-            color: var(--text-secondary);
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            padding: 6px 16px;
-            border-radius: 12px;
-            cursor: pointer;
-            outline: none;
-            will-change: transform;
-            transition: transform 0.2s cubic-bezier(0.3, 1.4, 0.5, 1), border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
-        }
-
-        .picks-tab.active {
-            color: var(--text-primary);
-            background: rgba(10, 132, 255, 0.22);
-            border-color: #0a84ff;
-        }
-
-        .picks-tab:hover,
-        .picks-tab:focus,
-        .picks-tab.focused {
-            border-color: var(--glass-focus-border);
-            transform: scale(1.06);
-        }
-
-        .picks-grid {
-            /* Flexbox fallback for engines without CSS Grid; display: grid
-               below overrides it on any engine that understands grid. */
-            display: flex;
-            flex-wrap: wrap;
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-        }
-
-        .pick-card {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1.5px solid var(--glass-border);
-            border-radius: 18px;
-            height: 128px;
-            flex: 0 0 calc((100% - 20px * 3) / 4);
-            display: flex;
-            overflow: hidden;
-            cursor: pointer;
-            outline: none;
-            will-change: transform;
-            transition: transform 0.26s cubic-bezier(0.3, 1.4, 0.5, 1), border-color 0.2s ease, background 0.2s ease;
-            transform: translateZ(0);
-            position: relative;
-        }
-
-        .pick-card:hover,
-        .pick-card:focus,
-        .pick-card.focused {
-            transform: scale(1.04) translateY(-4px) translateZ(0);
-            border-color: var(--glass-focus-border);
-            box-shadow: 0 15px 35px rgba(0,0,0,0.6), 0 0 20px rgba(255,255,255,0.2);
-            background: rgba(255, 255, 255, 0.14);
-        }
-
-        .pick-poster {
-            width: 92px;
-            height: 100%;
-            background-size: cover;
-            background-position: center;
-            flex-shrink: 0;
-            background-color: #1a2030;
-        }
-
-        .pick-meta {
-            padding: 12px 16px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            gap: 4px;
-            overflow: hidden;
-        }
-
-        .pick-badge {
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--accent);
-        }
-
-        .pick-title {
-            font-size: 16px;
-            font-weight: 600;
-            letter-spacing: -0.3px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .pick-service {
-            font-size: 12px;
-            color: var(--text-secondary);
-        }
+        .app-tile.has-label .app-icon { padding-bottom: 22px; }
+        .app-tile.has-label .app-icon svg { height: 70%; }
 
         /* Modal Overlay (Settings & Customize Shelf) */
         .modal-backdrop {
@@ -514,14 +593,25 @@
             left: 0;
             width: 100vw;
             height: 100vh;
-            background: rgba(4, 6, 12, 0.82);
-            backdrop-filter: blur(18px);
-            -webkit-backdrop-filter: blur(18px);
+            /* Dark scrim, light enough that the glass panel still has a picture to blur. */
+            background: rgba(0, 0, 0, 0.6);
             z-index: 500;
             display: none;
             align-items: center;
             justify-content: center;
             padding: 40px;
+            overflow: hidden;
+        }
+
+        /* Liquid Glass popup surface, the default for every popup (weather, settings). */
+        .glass-panel {
+            background: rgba(30, 30, 32, 0.55);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            backdrop-filter: blur(40px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 36px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 30px 80px rgba(0, 0, 0, 0.45);
+            color: #f5f5f7;
         }
 
         .modal-backdrop.active {
@@ -529,293 +619,405 @@
         }
 
         .modal-box {
-            width: 960px;
-            max-height: 86vh;
-            background: rgba(22, 27, 40, 0.92);
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            border-radius: 28px;
-            padding: 32px 38px;
+            width: 1080px;
+            max-height: 88vh;
+            padding: 40px 48px;
             display: flex;
             flex-direction: column;
-            gap: 22px;
-            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.85);
+            gap: 28px;
             overflow-y: auto;
         }
 
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            padding-bottom: 16px;
+        /* Split-view settings sheet (tvOS/macOS): title bar, sidebar on the left, options on the right. */
+        .settings-sheet.modal-box {
+            width: 1240px;
+            height: 78vh;
+            padding: 0;
+            gap: 0;
+            overflow: hidden;
         }
 
-        .modal-title {
-            font-size: 26px;
-            font-weight: 700;
-        }
+        /* On glass, groups are a lighter translucent step and separators a faint white line. */
+        .settings-sheet .set-group { background: rgba(255, 255, 255, 0.08); }
+        .settings-sheet .set-row + .set-row::before { border-color: rgba(255, 255, 255, 0.12); }
+        .settings-sheet .set-header,
+        .settings-sheet .set-footer,
+        .settings-sheet .set-value,
+        .settings-sheet .set-chev,
+        .settings-sheet .set-input,
+        .settings-sheet .set-input::placeholder { color: rgba(245, 245, 247, 0.6); }
+        .settings-sheet .set-switch { background: rgba(255, 255, 255, 0.18); }
+        .settings-sheet .set-switch.on { background: #34c759; }
 
-        .modal-section-title {
-            font-size: 14px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: var(--accent);
-            margin-bottom: 10px;
-        }
-
-        .app-selector-grid {
-            /* Flexbox fallback for engines without CSS Grid; display: grid
-               below overrides it on any engine that understands grid. */
-            display: flex;
-            flex-wrap: wrap;
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 12px;
-            max-height: 240px;
-            overflow-y: auto;
-            padding: 4px;
-        }
-
-        .app-selector-grid .app-toggle-item {
-            flex: 0 0 calc((100% - 12px * 3) / 4);
-        }
-
-        .app-toggle-item {
+        /* Title left, actions right; no divider line, just space. */
+        .settings-top {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1.5px solid rgba(255, 255, 255, 0.1);
-            border-radius: 14px;
-            padding: 10px 14px;
-            cursor: pointer;
-            color: var(--text-primary);
-            font-size: 14px;
-            font-weight: 500;
-            transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+            padding: 32px 40px 8px;
         }
 
-        .app-toggle-item.selected {
-            background: rgba(10, 132, 255, 0.22);
-            border-color: #0a84ff;
+        .settings-title {
+            font-family: var(--font-display);
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.4px;
         }
 
-        .app-toggle-item:hover,
-        .app-toggle-item.focused {
-            transform: scale(1.03);
-            border-color: #ffffff;
-            background: rgba(255, 255, 255, 0.16);
+        .settings-actions { display: flex; gap: 12px; }
+
+        /* Same glass pills as the home screen; the focus fill is centred on the text. */
+        .settings-actions .header-btn {
+            min-width: 132px;
+            justify-content: center;
+            padding: 10px 24px;
         }
 
-        .shelf-edit-actions { display: flex; align-items: center; gap: 10px; }
-        .shelf-edit-actions[hidden], #reorderShelfBtn[hidden] { display: none; }
-        .shelf-edit-actions button, #reorderShelfBtn { padding: 7px 14px; font-size: 14px; }
-        .app-tile.moving { outline: 3px solid #fff; transform: translateY(-8px); }
+        .settings-save { font-weight: 600; }
 
-        .app-tile[aria-busy="true"] { border-color: var(--accent); }
-
-        .settings-row {
-            /* Flexbox fallback for engines without CSS Grid; display: grid
-               below overrides it on any engine that understands grid. */
+        .settings-body {
             display: flex;
-            flex-wrap: wrap;
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
+            height: calc(100% - 100px);
         }
 
-        .field-group {
-            flex: 0 0 calc((100% - 16px * 2) / 3);
+        .settings-side {
+            flex: 0 0 340px;
             display: flex;
             flex-direction: column;
             gap: 6px;
+            padding: 24px 0 24px 28px;
         }
 
-        .field-group label {
-            font-size: 13px;
-            color: var(--text-secondary);
+        .side-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 60px;
+            padding: 0 22px;
+            border: none;
+            border-radius: 16px;
+            background: none;
+            color: rgba(245, 245, 247, 0.75);
+            font-family: var(--font-text);
+            font-size: 20px;
+            font-weight: 500;
+            text-align: left;
+            cursor: pointer;
+            outline: none;
+            transition: background-color 0.15s ease, color 0.15s ease, transform 0.2s var(--ease-focus);
         }
 
-        .field-input {
-            background: rgba(0, 0, 0, 0.35);
-            border: 1.5px solid rgba(255, 255, 255, 0.16);
-            border-radius: 12px;
-            padding: 10px 14px;
-            color: #ffffff;
-            font-size: 14px;
+        .side-value { font-size: 16px; opacity: 0.65; }
+
+        /* Selected category: a lighter glass step. Focused: solid white, like every focus in Zen. */
+        .side-item.active { background: rgba(255, 255, 255, 0.1); color: #f5f5f7; }
+        .side-item.focused,
+        .side-item:hover { background: #f5f5f7; color: #1d1d1f; }
+
+        /* Scrolls, but without a visible bar: remote focus moves the list (focus() scrolls into view). */
+        .settings-scroll::-webkit-scrollbar { display: none; }
+
+        .settings-scroll {
+            scrollbar-width: none;
+            overflow-x: hidden;
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 40px 40px 32px;
+        }
+
+        .pane[hidden] { display: none; }
+
+        .pane-title {
+            font-family: var(--font-display);
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.4px;
+            padding: 6px 4px 18px;
+        }
+
+        .pane-back {
+            border: none;
+            background: none;
+            border-radius: var(--radius-pill);
+            padding: 8px 16px;
+            margin-left: -12px;
+            color: rgba(245, 245, 247, 0.7);
+            font-family: var(--font-text);
+            font-size: 16px;
+            cursor: pointer;
             outline: none;
         }
 
-        .field-input:focus,
-        .field-input.focused {
-            border-color: var(--accent);
-            background: rgba(0, 0, 0, 0.55);
+        .pane-back.focused, .pane-back:hover { background: #f5f5f7; color: #1d1d1f; }
+
+        .set-header {
+            padding: 28px 24px 10px;
+            font-size: 16px;
+            color: var(--text-secondary);
         }
 
-        .modal-actions {
+        .set-footer {
+            padding: 10px 24px 0;
+            font-size: 15px;
+            line-height: 1.4;
+            color: var(--text-secondary);
+        }
+
+        .set-group {
+            background: var(--surface);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .set-group-last { margin-top: 36px; }
+
+        .set-row {
             display: flex;
-            justify-content: flex-end;
+            align-items: center;
             gap: 14px;
-            padding-top: 10px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .btn-primary {
-            background: var(--accent);
-            color: #ffffff;
-            border: 2px solid transparent;
-            padding: 10px 24px;
-            border-radius: 14px;
-            font-size: 15px;
-            font-weight: 600;
+            width: 100%;
+            min-height: 64px;
+            padding: 0 24px;
+            position: relative;
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-family: var(--font-text);
+            font-size: 20px;
+            text-align: left;
             cursor: pointer;
+            outline: none;
+            transition: background-color 0.15s ease, color 0.15s ease;
         }
 
-        .btn-secondary {
-            background: rgba(255, 255, 255, 0.1);
-            color: #ffffff;
-            border: 2px solid transparent;
-            padding: 10px 20px;
-            border-radius: 14px;
-            font-size: 15px;
+        /* Separator inset from the left edge, skipped on the first row (iOS). */
+        .set-row + .set-row::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 24px;
+            right: 0;
+            border-top: 1px solid var(--hairline);
+        }
+
+        .set-label { flex: 1; }
+
+        .set-value,
+        .set-chev {
+            color: var(--text-secondary);
+        }
+
+        .set-chev { font-size: 26px; line-height: 1; }
+
+        .set-destructive { color: #ff453a; }
+        .theme-day .set-destructive { color: #d70015; }
+
+        /* TV focus: the whole row inverts, like tvOS Settings. */
+        .set-row.focused,
+        .set-row:hover,
+        .set-row:focus-within {
+            background: var(--text-primary);
+            color: var(--canvas);
+        }
+
+        .set-row.focused .set-value,
+        .set-row.focused .set-chev,
+        .set-row:focus-within .set-input {
+            color: inherit;
+            opacity: 0.65;
+        }
+
+        .set-input {
+            flex: 1;
+            min-width: 0;
+            background: none;
+            border: none;
+            outline: none;
+            color: var(--text-secondary);
+            font-family: var(--font-text);
+            font-size: 20px;
+            text-align: right;
+        }
+
+        .set-input::placeholder { color: var(--text-secondary); }
+
+        /* iOS switch, scaled up for TV */
+        .set-switch {
+            flex-shrink: 0;
+            position: relative;
+            width: 64px;
+            height: 38px;
+            border-radius: 19px;
+            background: var(--surface-2);
+            transition: background-color 0.2s ease;
+        }
+
+        .set-switch::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+            transition: transform 0.25s var(--ease-focus);
+        }
+
+        .set-check {
+            min-width: 24px;
+            color: #f5f5f7;
+            font-size: 22px;
             font-weight: 600;
-            cursor: pointer;
+            text-align: right;
         }
 
-        .btn-primary:hover, .btn-primary.focused,
-        .btn-secondary:hover, .btn-secondary.focused {
-            border-color: #ffffff;
-            transform: scale(1.05);
+        .set-row.focused .set-check { color: inherit; }
+
+        .set-switch.on { background: #34c759; }
+
+        /* Artwork rows: small painting thumbnail, title over artist. */
+        .art-row { min-height: 84px; }
+        .art-thumb {
+            width: 88px;
+            height: 58px;
+            object-fit: cover;
+            border-radius: 8px;
+            flex-shrink: 0;
         }
+        .art-row .set-label { line-height: 1.25; }
+        .art-by {
+            display: block;
+            font-size: 15px;
+            opacity: 0.6;
+        }
+        .set-switch.on::after { transform: translateX(26px); }
+
+        .shelf-edit-actions { display: flex; align-items: center; gap: 10px; }
+        .shelf-edit-actions[hidden] { display: none; }
+        .shelf-edit-actions button { padding: 8px 20px; font-size: 17px; }
+        .app-tile.moving { box-shadow: 0 0 0 4px var(--canvas), 0 0 0 8px var(--accent); transform: translateY(-10px); }
+
+        .app-tile[aria-busy="true"] { box-shadow: 0 0 0 4px var(--canvas), 0 0 0 8px var(--accent); }
 
         /* Toast Popup */
         .toast-msg {
             position: fixed;
-            top: 24px;
-            right: 36px;
-            background: rgba(20, 24, 35, 0.92);
-            backdrop-filter: blur(25px);
-            border: 1px solid rgba(255, 255, 255, 0.22);
-            padding: 12px 20px;
-            border-radius: 14px;
-            font-size: 14px;
-            font-weight: 600;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+            top: 32px;
+            /* Centered without a CSS transform, so Motion's y animation doesn't fight it. */
+            left: 0;
+            right: 0;
+            margin: 0 auto;
+            width: -webkit-max-content;
+            width: max-content;
+            padding: 14px 28px;
+            border-radius: var(--radius-pill);
+            font-size: 18px;
+            font-weight: 500;
             display: none;
             z-index: 1000;
         }
 
-        /* Weather & Sun Drawer */
-        .drawer-backdrop {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(4, 6, 12, 0.55);
-            z-index: 500;
-            display: none;
-            justify-content: flex-end;
-        }
-
-        .drawer-backdrop.active {
-            display: flex;
-        }
-
-        .drawer-panel {
-            width: 460px;
-            max-width: 90vw;
-            height: 100%;
-            background: rgba(18, 22, 34, 0.96);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border-left: 1px solid rgba(255, 255, 255, 0.14);
-            padding: 32px 30px;
+        /* Weather popup (Apple Weather on glass): big thin temperature, one inner card, no scrolling. */
+        .weather-panel {
+            width: 760px;
+            max-width: 100%;
+            padding: 48px 56px 40px;
             display: flex;
             flex-direction: column;
-            gap: 20px;
-            box-shadow: -20px 0 60px rgba(0, 0, 0, 0.6);
-            transform: translateX(100%);
-            transition: transform 0.32s cubic-bezier(0.3, 1.1, 0.4, 1);
-            overflow-y: auto;
+            align-items: center;
+            gap: 32px;
+            text-align: center;
         }
 
-        .drawer-backdrop.active .drawer-panel {
-            transform: translateX(0);
+        .wx-now-city {
+            font-size: 22px;
+            font-weight: 600;
         }
 
-        .drawer-current {
+        .wx-now-temp {
+            font-family: var(--font-display);
+            font-size: 104px;
+            font-weight: 200;
+            letter-spacing: -4px;
+            line-height: 1;
+            margin: 6px 0 10px 18px; /* optical: the ° makes the number look off-centre */
+        }
+
+        .wx-now-cond {
             display: flex;
             align-items: center;
-            gap: 16px;
+            justify-content: center;
+            gap: 10px;
+            font-size: 20px;
+            color: rgba(245, 245, 247, 0.75);
         }
 
-        .drawer-current-icon {
-            font-size: 48px;
+        /* Inner card: a lighter glass step instead of a border. */
+        .wx-card {
+            width: 100%;
+            padding: 20px 16px 22px;
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.07);
         }
 
-        .drawer-current-temp {
-            font-size: 32px;
-            font-weight: 700;
-        }
-
-        .drawer-current-sub {
+        .wx-card-title {
             font-size: 14px;
-            color: var(--text-secondary);
+            color: rgba(245, 245, 247, 0.6);
+            text-align: left;
+            padding: 0 12px 14px;
         }
 
+        /* Equal columns that always fit: no horizontal scrollbar. */
         .drawer-hourly {
             display: flex;
-            gap: 10px;
-            overflow-x: auto;
-            padding: 4px 2px;
         }
 
         .drawer-hour-chip {
-            background: rgba(255, 255, 255, 0.06);
-            border: 1.5px solid var(--glass-border);
-            border-radius: 14px;
-            padding: 10px 8px;
+            flex: 1 1 0;
+            min-width: 0;
             text-align: center;
-            min-width: 58px;
-            flex-shrink: 0;
         }
 
+        .drawer-hour-chip:first-child .drawer-hour-time { color: #f5f5f7; font-weight: 600; }
+
         .drawer-hour-time {
-            font-size: 12px;
-            color: var(--text-secondary);
+            font-size: 15px;
+            color: rgba(245, 245, 247, 0.6);
         }
 
         .drawer-hour-icon {
-            font-size: 20px;
-            margin: 4px 0;
+            font-size: 26px;
+            margin: 10px 0;
         }
 
         .drawer-hour-temp {
-            font-size: 14px;
+            font-size: 20px;
             font-weight: 600;
         }
 
         .drawer-sun-row {
             display: flex;
-            gap: 24px;
+            justify-content: center;
+            gap: 64px;
         }
 
         .drawer-sun-item {
             display: flex;
             align-items: center;
-            gap: 10px;
-            font-size: 24px;
+            gap: 12px;
+            font-size: 26px;
+            text-align: left;
         }
 
         .drawer-sun-label {
-            font-size: 12px;
-            color: var(--text-secondary);
+            font-size: 14px;
+            color: rgba(245, 245, 247, 0.6);
         }
 
         .drawer-sun-value {
-            font-size: 17px;
+            font-size: 20px;
             font-weight: 600;
         }
 
@@ -841,186 +1043,278 @@
         }
 
         .screensaver-clock {
-            font-size: 132px;
-            font-weight: 200;
-            letter-spacing: -2px;
+            font-family: var(--font-display);
+            font-size: 160px;
+            font-weight: 300;
+            letter-spacing: -4px;
+            font-variant-numeric: tabular-nums;
             color: rgba(255, 255, 255, 0.82);
         }
 
         .screensaver-date {
-            font-size: 22px;
+            font-size: 26px;
             font-weight: 400;
-            letter-spacing: 2px;
-            text-transform: uppercase;
             color: rgba(255, 255, 255, 0.4);
             margin-top: 6px;
+        }
+
+        /* Art screensaver: full-screen paintings (cover, no border) that crossfade and drift slowly. */
+        .saver-art { display: none; }
+        .screensaver.art-mode .saver-art { display: block; }
+        .screensaver.art-mode .screensaver-clock-wrap { display: none; }
+
+        .saver-img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0;
+            transition: opacity 2s ease;
+        }
+
+        .saver-img.visible { opacity: 1; }
+
+        /* Ken Burns drift over one painting's minute on screen (transform only, GPU-cheap). */
+        .saver-img.drift {
+            -webkit-animation: art-drift 62s linear forwards;
+            animation: art-drift 62s linear forwards;
+        }
+
+        @-webkit-keyframes art-drift { from { -webkit-transform: scale(1); } to { -webkit-transform: scale(1.06) translate(-1%, -1%); } }
+        @keyframes art-drift { from { transform: scale(1); } to { transform: scale(1.06) translate(-1%, -1%); } }
+
+        @media (prefers-reduced-motion: reduce) {
+            .saver-img.drift { -webkit-animation: none; animation: none; }
+        }
+
+        /* Museum-label caption, bottom left, on a soft glass chip so it reads on any painting. */
+        .saver-caption {
+            position: absolute;
+            left: 80px;
+            bottom: 60px;
+            max-width: 720px;
+            padding: 16px 22px;
+            border-radius: 18px;
+            background: rgba(0, 0, 0, 0.35);
+            -webkit-backdrop-filter: blur(20px);
+            backdrop-filter: blur(20px);
+            color: #f5f5f7;
+            opacity: 0;
+            transition: opacity 1.5s ease;
+        }
+
+        .saver-caption.show { opacity: 1; }
+
+        .saver-title {
+            font-family: var(--font-display);
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.3px;
+        }
+
+        .saver-artist {
+            margin-top: 4px;
+            font-size: 16px;
+            color: rgba(245, 245, 247, 0.7);
         }
     </style>
 </head>
 <body>
-    <div class="ambient-glow" id="ambientGlow"></div>
-    <div class="toast-msg" id="toastMsg" role="status" aria-live="polite">Launching...</div>
+    <div class="toast-msg glass" id="toastMsg" role="status" aria-live="polite">Launching...</div>
+
+    <div class="hero-backdrop" id="heroBackdrop"></div>
 
     <div class="container">
         <!-- Header -->
         <header>
-            <div class="brand-group">
-                <div class="brand-logo">
-                    <svg viewBox="0 0 24 24"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>
-                </div>
-                <div class="brand-title">Free My TV</div>
-                <div class="tag-pill" id="themeBadge">60 FPS • Onboard</div>
+            <div class="clock-group">
+                <div class="clock" id="clockText">20:30</div>
+                <div class="date" id="dateText" hidden>Mon, Oct 19</div>
+                <span id="themeBadge" hidden></span>
+                <span id="picksSourceBadge" hidden></span>
+            </div>
+            <div class="tab-bar glass" role="tablist">
+                <button class="picks-tab nav-item active" id="tabMovies" role="tab">Filmes</button>
+                <button class="picks-tab nav-item" id="tabShows" role="tab">Séries</button>
             </div>
             <div class="header-info">
-                <button class="header-btn nav-item" id="customizeBtn" data-tag="Personalize" data-title="Customize Shelf & Settings" data-desc="Choose which installed TV apps appear on your shelf, configure weather city, and TMDB key.">
-                    <span>⚙️ Customize</span>
-                </button>
-                <div class="weather-widget nav-item" id="weatherWidget" data-tag="Live Forecast" data-title="Local Weather & Sunset" data-desc="Live temperature and sky conditions powered by Open-Meteo.">
-                    <span id="weatherIcon">☀️</span>
+                <div class="weather-widget glass nav-item" id="weatherWidget">
+                    <span class="wx" id="weatherIcon"></span>
+                    <div class="weather-temp" id="weatherTemp">--°</div>
                     <div>
-                        <div id="weatherText">Loading...</div>
-                        <div class="weather-sub" id="weatherSub">Auto-detecting</div>
+                        <div class="weather-cond" id="weatherText">Carregando…</div>
+                        <div class="weather-sub" id="weatherSub">Localizando</div>
                     </div>
                 </div>
-                <div class="clock-group">
-                    <div class="date" id="dateText">Mon, Oct 19</div>
-                    <div class="clock" id="clockText">20:30</div>
-                </div>
+                <button class="header-btn icon-btn glass nav-item" id="artModeBtn" aria-label="Modo arte">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm1 2v10.6l4.3-4.3a1 1 0 0 1 1.4 0l2.8 2.8 4.3-4.3a1 1 0 0 1 1.4 0L20 12.6V6H4zm4.5 1.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/></svg>
+                </button>
+                <button class="header-btn icon-btn glass nav-item" id="customizeBtn" aria-label="Ajustes" data-tag="Personalize" data-title="Customize Shelf & Settings" data-desc="Choose which installed TV apps appear on your shelf, configure weather city, and TMDB key.">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94a7.14 7.14 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54A.5.5 0 0 0 13.9 2.4h-3.84a.5.5 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.61.22L2.67 8.88a.5.5 0 0 0 .12.64l2.03 1.58a7.14 7.14 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.3.61.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .44-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.48 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></svg>
+                </button>
             </div>
         </header>
 
-        <!-- Top Shelf (Hero Preview) -->
-        <div class="hero-shelf">
-            <div class="hero-tag" id="heroTag">App Launcher</div>
-            <div class="hero-title" id="heroTitle">Clean & Ad-Free Home</div>
-            <div class="hero-desc" id="heroDesc">Navigate smoothly with Magic Remote D-Pad or pointer. Launch apps in 100ms with zero ads.</div>
+        <!-- Top shelf carousel: trending titles of the active tab. Focus it and use ←/→ to flip, OK to open. -->
+        <div class="hero-banner nav-item" id="heroBanner" tabindex="0" aria-roledescription="carousel">
+            <div class="hero-content">
+                <div class="hero-title" id="heroTitle"></div>
+                <div class="hero-tag" id="heroTag"></div>
+                <div class="hero-desc" id="heroDesc"></div>
+            </div>
+            <div class="hero-dots glass" id="heroDots" aria-hidden="true"></div>
         </div>
 
-        <!-- Glass Shelf: Apps -->
-        <div class="shelf-wrapper">
-            <div class="shelf-top-bar">
-                <div class="shelf-header">Favorite Apps</div>
-                <div class="shelf-hint" id="shelfCountHint" aria-live="polite">Instant Native Launch</div>
-                <button class="header-btn nav-item" id="reorderShelfBtn" data-title="Reorder tiles" data-desc="Rearrange your apps right here on the shelf.">Reorder</button>
-                <div class="shelf-edit-actions" id="shelfEditActions" hidden>
-                    <button class="header-btn nav-item" id="saveShelfOrder" data-title="Save tile order">Done</button>
-                    <button class="header-btn nav-item" id="cancelShelfOrder" data-title="Cancel reordering">Cancel</button>
-                </div>
+        <!-- App Shelf -->
+        <div class="shelf-wrapper glass">
+            <div class="shelf-top-bar shelf-edit-actions" id="shelfEditActions" hidden>
+                <div class="shelf-hint" id="shelfCountHint" aria-live="polite"></div>
+                <button class="header-btn glass nav-item" id="saveShelfOrder">Concluir</button>
+                <button class="header-btn glass nav-item" id="cancelShelfOrder">Cancelar</button>
             </div>
             <div class="shelf-grid" id="appsGrid"></div>
-        </div>
-
-        <!-- Trending Picks Row -->
-        <div class="picks-section">
-            <div class="picks-top-bar">
-                <div class="picks-header">Trending This Week</div>
-                <div class="picks-tabs">
-                    <button class="picks-tab nav-item active" id="tabMovies" data-tag="Trending" data-title="Movies" data-desc="Switch the row below to this week's trending movies.">Movies</button>
-                    <button class="picks-tab nav-item" id="tabShows" data-tag="Trending" data-title="Shows" data-desc="Switch the row below to this week's trending TV shows.">Shows</button>
-                </div>
-                <div class="picks-source-badge" id="picksSourceBadge">Live Feed</div>
-            </div>
-            <div class="picks-grid" id="picksGrid"></div>
         </div>
     </div>
 
     <!-- Customize Shelf & Settings Modal -->
     <div class="modal-backdrop" id="settingsModal">
-        <div class="modal-box">
-            <div class="modal-header">
-                <div class="modal-title">Customize Free My TV</div>
-                <div style="font-size: 13px; color: var(--text-secondary);">Press BACK or ESC to close</div>
-            </div>
-
-            <div>
-                <div class="modal-section-title">1. Select Apps for Glass Shelf (Click to Toggle)</div>
-                <div class="app-selector-grid" id="appSelectorGrid"></div>
-
-            </div>
-
-            <div>
-                <div class="modal-section-title">2. HDMI Devices</div>
-                <p style="color: var(--text-secondary); margin: 0 0 12px;">Press a port to cycle its device. Save &amp; Apply to keep your choices.</p>
-                <div class="hdmi-options" id="hdmiOptions"></div>
-            </div>
-
-            <div>
-                <div class="modal-section-title">3. Weather, Theme & TMDB API</div>
-                <div class="settings-row">
-                    <div class="field-group">
-                        <label>City Name (or leave Auto)</label>
-                        <input type="text" class="field-input modal-nav" id="cfgCity" placeholder="e.g. Sao Paulo, Lisbon, NYC">
-                    </div>
-                    <div class="field-group">
-                        <label>Theme Mode</label>
-                        <select class="field-input modal-nav" id="cfgTheme">
-                            <option value="auto">Auto (Follows Sunset)</option>
-                            <option value="night">Deep Midnight (Default)</option>
-                            <option value="oled">Pure OLED Black</option>
-                            <option value="day">Daylight Blue</option>
-                        </select>
-                    </div>
-                    <div class="field-group">
-                        <label>TMDB API Key (Optional)</label>
-                        <input type="text" class="field-input modal-nav" id="cfgTmdbKey" placeholder="Optional for TMDB Trending">
-                    </div>
+        <!-- tvOS/macOS-style settings: categories on the left, the focused category's options on the right. -->
+        <div class="modal-box settings-sheet glass-panel">
+            <div class="settings-top">
+                <div class="settings-title">Ajustes</div>
+                <div class="settings-actions">
+                    <button class="header-btn glass modal-nav" id="closeModalBtn">Cancelar</button>
+                    <button class="header-btn glass settings-save modal-nav" id="saveModalBtn">Salvar</button>
                 </div>
             </div>
 
-            <div class="modal-actions">
-                <button class="btn-secondary modal-nav" id="resetDefaultBtn">Reset Defaults</button>
-                <button class="btn-secondary modal-nav" id="closeModalBtn">Cancel</button>
-                <button class="btn-primary modal-nav" id="saveModalBtn">Save & Apply</button>
+            <div class="settings-body">
+                <nav class="settings-side" aria-label="Categorias">
+                    <button class="side-item modal-nav" data-pane="apps"><span class="set-label">Apps</span><span class="side-value" id="appsCountValue"></span></button>
+                    <button class="side-item modal-nav" data-pane="hdmi"><span class="set-label">Entradas HDMI</span></button>
+                    <button class="side-item modal-nav" data-pane="weather"><span class="set-label">Clima</span></button>
+                    <button class="side-item modal-nav" data-pane="movies"><span class="set-label">Filmes e séries</span></button>
+                    <button class="side-item modal-nav" data-pane="saver"><span class="set-label">Proteção de tela</span></button>
+                    <button class="side-item modal-nav" data-pane="general"><span class="set-label">Geral</span></button>
+                </nav>
+
+                <div class="settings-scroll">
+                    <section class="pane" data-pane="apps">
+                        <div class="pane-title">Apps</div>
+                        <div class="set-header">Na tela inicial</div>
+                        <div class="set-group" id="appSelectorGrid"></div>
+                        <div class="set-footer">Escolha até 9 apps.</div>
+                        <div class="set-group set-group-last">
+                            <button class="set-row modal-nav" id="reorderAppsRow"><span class="set-label">Reordenar apps</span><span class="set-chev">›</span></button>
+                        </div>
+                        <div class="set-footer">Mude a ordem direto na tela inicial: OK pega o app, ← → move, OK solta.</div>
+                    </section>
+
+                    <section class="pane" data-pane="hdmi" hidden>
+                        <div id="hdmiListView">
+                            <div class="pane-title">Entradas HDMI</div>
+                            <div class="set-group" id="hdmiOptions"></div>
+                            <div class="set-footer">Escolha o videogame de cada entrada para o ícone mostrar o logo dele.</div>
+                        </div>
+                        <div id="hdmiPickerView" hidden>
+                            <button class="pane-back modal-nav" id="hdmiBackBtn">‹ Entradas HDMI</button>
+                            <div class="pane-title" id="hdmiPageTitle">HDMI</div>
+                            <div class="set-header">Aparelho conectado</div>
+                            <div class="set-group" id="hdmiDeviceList"></div>
+                        </div>
+                    </section>
+
+                    <section class="pane" data-pane="weather" hidden>
+                        <div class="pane-title">Clima</div>
+                        <div class="set-group">
+                            <label class="set-row"><span class="set-label">Cidade</span><input type="text" class="set-input modal-nav" id="cfgCity" placeholder="Automática"></label>
+                        </div>
+                        <div class="set-footer">Deixe vazio para descobrir a cidade pela sua conexão.</div>
+                    </section>
+
+                    <section class="pane" data-pane="movies" hidden>
+                        <div class="pane-title">Filmes e séries</div>
+                        <div class="set-group">
+                            <label class="set-row"><span class="set-label">Chave do TMDB</span><input type="password" class="set-input modal-nav" id="cfgTmdbKey" placeholder="Opcional" autocomplete="off"></label>
+                        </div>
+                        <div class="set-footer">Dados de filmes e séries do TMDB. Onde assistir: JustWatch.</div>
+                    </section>
+
+                    <section class="pane" data-pane="saver" hidden>
+                        <div class="pane-title">Proteção de tela</div>
+                        <div class="set-header">Estilo</div>
+                        <div class="set-group" id="saverStyleList"></div>
+                        <div class="set-header">Começar depois de</div>
+                        <div class="set-group" id="saverDelayList"></div>
+                        <div class="set-header">Obras favoritas</div>
+                        <div class="set-group" id="artFavList"></div>
+                        <div class="set-footer">Só as obras ligadas aparecem, uma por minuto. Com nenhuma ligada, passam todas. Obras em domínio público do The Metropolitan Museum of Art.</div>
+                        <div class="set-group set-group-last">
+                            <button class="set-row modal-nav" id="saverPreviewRow"><span class="set-label">Ver agora</span><span class="set-chev">›</span></button>
+                        </div>
+                    </section>
+
+                    <section class="pane" data-pane="general" hidden>
+                        <div class="pane-title">Geral</div>
+                        <div class="set-group">
+                            <button class="set-row set-destructive modal-nav" id="resetDefaultBtn"><span class="set-label">Restaurar padrões</span></button>
+                        </div>
+                        <div class="set-footer">Volta apps, entradas HDMI, cidade, chave e proteção de tela ao padrão. Só vale depois de Salvar.</div>
+                    </section>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Weather & Sun Drawer -->
-    <div class="drawer-backdrop" id="weatherDrawer">
-        <div class="drawer-panel">
-            <div class="modal-header">
-                <div class="modal-title">Weather & Sun</div>
-                <div style="font-size: 13px; color: var(--text-secondary);">Press BACK or ESC to close</div>
+    <!-- Weather popup: centered glass panel, Apple Weather-style big reading on top. -->
+    <div class="modal-backdrop" id="weatherDrawer">
+        <div class="weather-panel glass-panel" role="dialog" aria-label="Clima">
+            <div class="wx-now">
+                <div class="wx-now-city" id="drawerCity">Carregando…</div>
+                <div class="wx-now-temp" id="drawerTemp">--°</div>
+                <div class="wx-now-cond"><span class="wx" id="drawerIcon"></span><span id="drawerCond"></span></div>
             </div>
 
-            <div class="drawer-current">
-                <span class="drawer-current-icon" id="drawerIcon">☀️</span>
-                <div>
-                    <div class="drawer-current-temp" id="drawerTemp">--°C</div>
-                    <div class="drawer-current-sub" id="drawerCityLabel">Loading...</div>
-                </div>
-            </div>
-
-            <div>
-                <div class="modal-section-title">Next Hours</div>
+            <div class="wx-card">
+                <div class="wx-card-title">Próximas horas</div>
                 <div class="drawer-hourly" id="drawerHourly"></div>
             </div>
 
             <div class="drawer-sun-row">
                 <div class="drawer-sun-item">
-                    <span>🌅</span>
+                    <span class="wx" id="drawerSunriseIcon"></span>
                     <div>
-                        <div class="drawer-sun-label">Sunrise</div>
+                        <div class="drawer-sun-label">Nascer do sol</div>
                         <div class="drawer-sun-value" id="drawerSunrise">--:--</div>
                     </div>
                 </div>
                 <div class="drawer-sun-item">
-                    <span>🌇</span>
+                    <span class="wx" id="drawerSunsetIcon"></span>
                     <div>
-                        <div class="drawer-sun-label">Sunset</div>
+                        <div class="drawer-sun-label">Pôr do sol</div>
                         <div class="drawer-sun-value" id="drawerSunset">--:--</div>
                     </div>
                 </div>
             </div>
 
-            <div class="modal-actions">
-                <button class="btn-secondary" id="closeDrawerBtn">Close</button>
-            </div>
+            <button class="header-btn glass" id="closeDrawerBtn">Fechar</button>
         </div>
     </div>
 
     <!-- OLED-Safe Idle Screensaver -->
     <div class="screensaver" id="screensaverOverlay">
+        <!-- Art mode: two stacked images crossfade; the caption shows briefly per work. -->
+        <div class="saver-art" aria-hidden="true">
+            <img class="saver-img" id="saverImgA" alt="">
+            <img class="saver-img" id="saverImgB" alt="">
+            <div class="saver-caption" id="saverCaption">
+                <div class="saver-title" id="saverTitle"></div>
+                <div class="saver-artist" id="saverArtist"></div>
+            </div>
+        </div>
         <div class="screensaver-clock-wrap" id="screensaverClockWrap">
             <div class="screensaver-clock" id="screensaverClock">20:30</div>
             <div class="screensaver-date" id="screensaverDate">Mon, Oct 19</div>
@@ -1030,37 +1324,47 @@
     <script>
         // --- Default Catalog of Apps ---
         var DEFAULT_CATALOG = [
-            { id: 'youtube.leanback.v4', title: 'YouTube', tag: 'Streaming', desc: 'Watch 4K videos, live streams, music, and coding radio.', color: '#ff0000', badge: 'YT', bg: 'linear-gradient(135deg, #ff0000, #b00000)' },
-            { id: 'netflix', title: 'Netflix', tag: 'Movies & Series', desc: 'Unlimited movies, TV shows, and originals in 4K Dolby Vision.', color: '#e50914', badge: 'N', bg: 'linear-gradient(135deg, #1f1f1f, #080808)' },
-            { id: 'cdp-30', title: 'Plex', tag: 'Personal Media', desc: 'Stream your personal home cinema, movies, and music library.', color: '#e5a00d', badge: '>', bg: 'linear-gradient(135deg, #e5a00d, #9e6d00)' },
-            { id: 'com.crunchyroll.webapp', title: 'Crunchyroll', tag: 'Anime', desc: 'Stream the world\'s largest anime library and simulcasts.', color: '#f47521', badge: 'CR', bg: 'linear-gradient(135deg, #f47521, #c4570d)' },
-            { id: 'globoplaywebos', title: 'Globoplay', tag: 'Brazil Streaming', desc: 'Original series, live channels, sports, and cinema.', color: '#fb003f', badge: 'globo', bg: 'linear-gradient(135deg, #fb003f, #aa002a)' },
-            { id: 'com.webos.app.hdmi1', title: 'HDMI 1', tag: 'External Input', desc: 'Switch directly to HDMI 1 (PC / Gaming Console).', color: '#0a84ff', badge: 'HDMI 1', bg: 'linear-gradient(135deg, #0a84ff, #004ec4)' },
-            { id: 'com.webos.app.hdmi2', title: 'HDMI 2', tag: 'External Input', desc: 'Switch directly to HDMI 2 input.', color: '#00c7be', badge: 'HDMI 2', bg: 'linear-gradient(135deg, #00c7be, #007a74)' },
-            { id: 'com.webos.app.hdmi3', title: 'HDMI 3', tag: 'External Input', desc: 'Switch directly to HDMI 3 input.', color: '#0a84ff', badge: 'HDMI 3', bg: 'linear-gradient(135deg, #0a84ff, #004ec4)' },
-            { id: 'com.webos.app.hdmi4', title: 'HDMI 4', tag: 'External Input', desc: 'Switch directly to HDMI 4 input.', color: '#0a84ff', badge: 'HDMI 4', bg: 'linear-gradient(135deg, #0a84ff, #004ec4)' },
-            { id: 'com.webos.app.browser', title: 'Browser', tag: 'Internet', desc: 'Full-screen web browsing on your LG Smart TV.', color: '#5856d6', badge: 'WEB', bg: 'linear-gradient(135deg, #5856d6, #3634a3)' },
-            { id: 'org.webosbrew.hbchannel', title: 'Homebrew', tag: 'System', desc: 'Homebrew Channel app store, YouTube AdFree, and system tweaks.', color: '#cf0652', badge: 'HB', bg: 'linear-gradient(135deg, #cf0652, #8b0034)' },
-            { id: 'com.webos.app.mediadiscovery', title: 'Media Player', tag: 'Local Media', desc: 'Play photos, videos, and music from USB or DLNA servers.', color: '#7e56b1', badge: 'USB', bg: 'linear-gradient(135deg, #7e56b1, #4f3278)' },
-            { id: 'amazon', title: 'Prime Video', tag: 'Movies & Shows', desc: 'Watch Amazon Originals, popular movies, and live sports.', color: '#00a8e1', badge: 'prime', bg: 'linear-gradient(135deg, #00a8e1, #00628a)' },
-            { id: 'com.disney.disneyplus-prod', title: 'Disney+', tag: 'Streaming', desc: 'Disney, Pixar, Marvel, Star Wars, and National Geographic.', color: '#113ccf', badge: 'D+', bg: 'linear-gradient(135deg, #113ccf, #071961)' },
-            { id: 'spotify-beehive', title: 'Spotify', tag: 'Music', desc: 'Listen to millions of songs, albums, and podcasts on your TV.', color: '#1db954', badge: 'SP', bg: 'linear-gradient(135deg, #1db954, #0f7833)' }
+            { id: 'youtube.leanback.v4', title: 'YouTube', tag: 'Streaming', desc: 'Watch 4K videos, live streams, music, and coding radio.', color: '#ff0000', badge: 'YT', bg: '#ff0000' },
+            { id: 'netflix', title: 'Netflix', tag: 'Movies & Series', desc: 'Unlimited movies, TV shows, and originals in 4K Dolby Vision.', color: '#e50914', badge: 'N', bg: '#000000' },
+            { id: 'cdp-30', title: 'Plex', tag: 'Personal Media', desc: 'Stream your personal home cinema, movies, and music library.', color: '#e5a00d', badge: '>', bg: '#1f1f1f' },
+            { id: 'com.crunchyroll.webapp', title: 'Crunchyroll', tag: 'Anime', desc: 'Stream the world\'s largest anime library and simulcasts.', color: '#f47521', badge: 'CR', bg: '#f47521' },
+            { id: 'globoplaywebos', title: 'Globoplay', tag: 'Brazil Streaming', desc: 'Original series, live channels, sports, and cinema.', color: '#fb003f', badge: 'globo', bg: '#fb003f' },
+            // shortcut: Twitch/Kick webOS app IDs are unverified placeholders; discoverTVApps() swaps in the
+            // real ID by matching the installed app's title. Hardcode the real IDs once seen on the TV.
+            { id: 'twitch', title: 'Twitch', tag: 'Live Streaming', desc: 'Live streams, gaming, and IRL channels.', color: '#9146ff', badge: 'TW', bg: '#9146ff', logo: 'twitch' },
+            { id: 'kick', title: 'Kick', tag: 'Live Streaming', desc: 'Live streams and creators.', color: '#53fc18', badge: 'K', bg: '#000000', logo: 'kick' },
+            { id: 'com.webos.app.hdmi1', title: 'HDMI 1', tag: 'External Input', desc: 'Switch directly to HDMI 1 (PC / Gaming Console).', color: '#0a84ff', badge: 'HDMI 1', bg: '#0071e3' },
+            { id: 'com.webos.app.hdmi2', title: 'HDMI 2', tag: 'External Input', desc: 'Switch directly to HDMI 2 input.', color: '#00c7be', badge: 'HDMI 2', bg: '#00a19a' },
+            { id: 'com.webos.app.hdmi3', title: 'HDMI 3', tag: 'External Input', desc: 'Switch directly to HDMI 3 input.', color: '#0a84ff', badge: 'HDMI 3', bg: '#0071e3' },
+            { id: 'com.webos.app.hdmi4', title: 'HDMI 4', tag: 'External Input', desc: 'Switch directly to HDMI 4 input.', color: '#0a84ff', badge: 'HDMI 4', bg: '#0071e3' },
+            { id: 'com.webos.app.browser', title: 'Browser', tag: 'Internet', desc: 'Full-screen web browsing on your LG Smart TV.', color: '#5856d6', badge: 'WEB', bg: '#ffffff' },
+            { id: 'org.webosbrew.hbchannel', title: 'Homebrew', tag: 'System', desc: 'Homebrew Channel app store, YouTube AdFree, and system tweaks.', color: '#cf0652', badge: 'HB', bg: '#cf0652' },
+            { id: 'com.webos.app.mediadiscovery', title: 'Media Player', tag: 'Local Media', desc: 'Play photos, videos, and music from USB or DLNA servers.', color: '#7e56b1', badge: 'USB', bg: '#7e56b1' },
+            { id: 'amazon', title: 'Prime Video', tag: 'Movies & Shows', desc: 'Watch Amazon Originals, popular movies, and live sports.', color: '#00a8e1', badge: 'prime', bg: '#00a8e1' },
+            { id: 'com.disney.disneyplus-prod', title: 'Disney+', tag: 'Streaming', desc: 'Disney, Pixar, Marvel, Star Wars, and National Geographic.', color: '#113ccf', badge: 'D+', bg: '#0b1d52' },
+            { id: 'spotify-beehive', title: 'Spotify', tag: 'Music', desc: 'Listen to millions of songs, albums, and podcasts on your TV.', color: '#1db954', badge: 'SP', bg: '#1db954' }
         ];
 
         // Device artwork is bundled inline so HDMI tiles also work offline.
         var DEVICE_PRESETS = [
             { key: 'default', title: '', color: '#0a84ff', shape: 'input' },
-            { key: 'ps5', title: 'PS5', color: '#123ca6', logo: 'playstation5' },
-            { key: 'ps4', title: 'PS4', color: '#173070', logo: 'playstation4' },
+            { key: 'ps5', title: 'PlayStation 5', color: '#123ca6', logo: 'playstation5' },
+            { key: 'ps4', title: 'PlayStation 4', color: '#173070', logo: 'playstation4' },
             { key: 'xbox', title: 'Xbox', color: '#107c10', logo: 'xbox' },
             { key: 'switch', title: 'Nintendo Switch', color: '#c82131', logo: 'nintendoswitch' },
-            { key: 'pc', title: 'Gaming PC', color: '#633ca6', shape: 'pc' }
+            { key: 'pc', title: 'PC Gamer', color: '#633ca6', shape: 'pc' }
         ];
         function readDeviceChoices() {
             try {
                 var saved = JSON.parse(localStorage.getItem('fmtv_hdmi_devices') || '{}');
                 return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
             } catch (e) { return {}; }
+        }
+        function readJsonArray(key) {
+            try {
+                var saved = JSON.parse(localStorage.getItem(key) || '[]');
+                return Array.isArray(saved) ? saved : [];
+            } catch (e) { return []; }
         }
         function isHDMI(app) { return /^com\.webos\.app\.hdmi[1-4]$/.test(app.id); }
         function devicePreset(app, choices) {
@@ -1080,9 +1384,10 @@
             'cdp-30': 'plex',
             'com.crunchyroll.webapp': 'crunchyroll',
             'globoplaywebos': 'globoplay',
-            'amazon': 'amazonprime',
+            'amazon': 'primevideo',
             'com.disney.disneyplus-prod': 'disneyplus',
-            'spotify-beehive': 'spotify'
+            'spotify-beehive': 'spotify',
+            'com.webos.app.browser': 'google'
         };
         function addTileImage(container, url, branded) {
             var img = document.createElement('img');
@@ -1112,10 +1417,11 @@
             'netflix',
             'amazon',
             'com.disney.disneyplus-prod',
-            'com.crunchyroll.webapp',
+            'globoplaywebos',
+            'twitch',
+            'kick',
             'com.webos.app.hdmi1',
-            'com.webos.app.browser',
-            'org.webosbrew.hbchannel'
+            'com.webos.app.browser'
         ];
 
         var FALLBACK_MOVIES = [
@@ -1139,8 +1445,12 @@
             city: localStorage.getItem('fmtv_city') || '',
             lat: parseFloat(localStorage.getItem('fmtv_lat') || '0'),
             lon: parseFloat(localStorage.getItem('fmtv_lon') || '0'),
-            theme: localStorage.getItem('fmtv_theme') || 'auto',
-            tmdbKey: localStorage.getItem('fmtv_tmdb_key') || '',
+            // Always dark, like Apple TV; the theme picker was removed from Ajustes.
+            theme: 'night',
+            screensaver: localStorage.getItem('fmtv_screensaver') || 'art', // 'art' | 'clock' | 'off'
+            screensaverDelay: parseInt(localStorage.getItem('fmtv_screensaver_delay'), 10) || 3, // minutes
+            artFavorites: readJsonArray('fmtv_art_favorites'), // artwork slugs; empty = show all
+            tmdbKey: localStorage.getItem('fmtv_tmdb_key') || (window.ZEN_ENV && window.ZEN_ENV.TMDB_API_KEY) || '',
             catalog: DEFAULT_CATALOG.slice(),
             picksTab: 'movies',
             hourlyForecast: [],
@@ -1191,7 +1501,7 @@
             document.getElementById('clockText').textContent = timeStr;
 
             var opts = { weekday: 'short', month: 'short', day: 'numeric' };
-            var dateStr = now.toLocaleDateString('en-US', opts);
+            var dateStr = now.toLocaleDateString('pt-BR', opts);
             document.getElementById('dateText').textContent = dateStr;
 
             document.getElementById('screensaverClock').textContent = timeStr;
@@ -1205,8 +1515,32 @@
         function showToast(msg, duration) {
             toastEl.textContent = msg;
             toastEl.style.display = 'block';
+            if (window.Motion) Motion.animate(toastEl, { opacity: [0, 1], y: [-16, 0] }, { type: 'spring', bounce: 0.3, duration: 0.4 });
             clearTimeout(window._toastTimer);
             window._toastTimer = setTimeout(function() { toastEl.style.display = 'none'; }, duration || 2400);
+        }
+
+        // Popups spring in/out with Motion (assets/vendor/motion.js, MIT). `hidden` is the
+        // panel's off state, e.g. { opacity: 0, scale: 0.94 } or { x: '100%' }. Old engines
+        // that can't load Motion just show/hide the popup instantly.
+        function animatePopup(backdrop, panel, show, hidden) {
+            backdrop._open = show;
+            if (show) backdrop.classList.add('active');
+            if (!window.Motion) {
+                if (!show) backdrop.classList.remove('active');
+                return;
+            }
+            var frames = {};
+            Object.keys(hidden).forEach(function(k) {
+                var on = (k === 'opacity' || k === 'scale') ? 1 : 0;
+                frames[k] = show ? [hidden[k], on] : [on, hidden[k]];
+            });
+            Motion.animate(backdrop, { opacity: show ? [0, 1] : [1, 0] }, { duration: show ? 0.25 : 0.2 });
+            Motion.animate(panel, frames, show ? { type: 'spring', bounce: 0.22, duration: 0.5 } : { duration: 0.2 })
+                .then(function() {
+                    // Skip if the popup was reopened while this close animation ran.
+                    if (!backdrop._open) backdrop.classList.remove('active');
+                });
         }
 
         // --- Theme Engine ---
@@ -1235,11 +1569,37 @@
         }
 
         // --- Live Weather & Sunset (Open-Meteo) ---
+        // Font Awesome Free 6.5.2 solid weather icons (CC BY 4.0, https://fontawesome.com/license/free).
+        // Inlined as [viewBox width, path] so they inherit currentColor and work offline.
+        var WEATHER_ICONS = {
+            'cloud-bolt': [512, 'M0 224c0 53 43 96 96 96h47.2L290 202.5c17.6-14.1 42.6-14 60.2 .2s22.8 38.6 12.8 58.8L333.7 320H352h64c53 0 96-43 96-96s-43-96-96-96c-.5 0-1.1 0-1.6 0c1.1-5.2 1.6-10.5 1.6-16c0-44.2-35.8-80-80-80c-24.3 0-46.1 10.9-60.8 28C256.5 24.3 219.1 0 176 0C114.1 0 64 50.1 64 112c0 7.1 .7 14.1 1.9 20.8C27.6 145.4 0 181.5 0 224zm330.1 3.6c-5.8-4.7-14.2-4.7-20.1-.1l-160 128c-5.3 4.2-7.4 11.4-5.1 17.8s8.3 10.7 15.1 10.7h70.1L177.7 488.8c-3.4 6.7-1.6 14.9 4.3 19.6s14.2 4.7 20.1 .1l160-128c5.3-4.2 7.4-11.4 5.1-17.8s-8.3-10.7-15.1-10.7H281.9l52.4-104.8c3.4-6.7 1.6-14.9-4.2-19.6z'],
+            'cloud-moon-rain': [576, 'M481.2 0C417 0 363.5 46.5 353.7 107.6c35.4 17.6 60.2 53.3 62.1 95.1c23.2 11 42 29.7 53.1 52.7c4 .4 8.1 .6 12.3 .6c34.9 0 66.7-13.8 89.9-36.1c5.1-4.9 6.4-12.5 3.2-18.7s-10.1-9.7-17-8.6c-4.9 .8-10 1.3-15.2 1.3c-49 0-88.4-39.3-88.4-87.4c0-32.6 18-61.1 44.9-76.1c6.1-3.4 9.3-10.5 7.8-17.4s-7.3-12-14.3-12.6c-3.6-.3-7.3-.5-10.9-.5zM367.9 383.9c44.2 0 80-35.8 80-80c0-39.3-28.4-72.1-65.8-78.7c1.2-5.6 1.9-11.3 1.9-17.2c0-44.2-35.8-80-80-80c-17 0-32.8 5.3-45.8 14.4C241.3 114.6 210.8 96 176 96c-53 0-96 43-96 96l0 1.3c-45.4 7.6-80 47.1-80 94.6c0 53 43 96 96 96H367.9zM85.4 420.1c-11-7.4-25.9-4.4-33.3 6.7l-32 48c-7.4 11-4.4 25.9 6.7 33.3s25.9 4.4 33.3-6.7l32-48c7.4-11 4.4-25.9-6.7-33.3zm96 0c-11-7.4-25.9-4.4-33.3 6.7l-32 48c-7.4 11-4.4 25.9 6.7 33.3s25.9 4.4 33.3-6.7l32-48c7.4-11 4.4-25.9-6.7-33.3zm96 0c-11-7.4-25.9-4.4-33.3 6.7l-32 48c-7.4 11-4.4 25.9 6.7 33.3s25.9 4.4 33.3-6.7l32-48c7.4-11 4.4-25.9-6.7-33.3zm96 0c-11-7.4-25.9-4.4-33.3 6.7l-32 48c-7.4 11-4.4 25.9 6.7 33.3s25.9 4.4 33.3-6.7l32-48c7.4-11 4.4-25.9-6.7-33.3z'],
+            'cloud-moon': [640, 'M495.8 0c5.5 0 10.9 .2 16.3 .7c7 .6 12.8 5.7 14.3 12.5s-1.6 13.9-7.7 17.3c-44.4 25.2-74.4 73-74.4 127.8c0 81 65.5 146.6 146.2 146.6c8.6 0 17-.7 25.1-2.1c6.9-1.2 13.8 2.2 17 8.5s1.9 13.8-3.1 18.7c-34.5 33.6-81.7 54.4-133.6 54.4c-9.3 0-18.4-.7-27.4-1.9c-11.2-22.6-29.8-40.9-52.6-51.7c-2.7-58.5-50.3-105.3-109.2-106.7c-1.7-10.4-2.6-21-2.6-31.8C304 86.1 389.8 0 495.8 0zM447.9 431.9c0 44.2-35.8 80-80 80H96c-53 0-96-43-96-96c0-47.6 34.6-87 80-94.6l0-1.3c0-53 43-96 96-96c34.9 0 65.4 18.6 82.2 46.4c13-9.1 28.8-14.4 45.8-14.4c44.2 0 80 35.8 80 80c0 5.9-.6 11.7-1.9 17.2c37.4 6.7 65.8 39.4 65.8 78.7z'],
+            'cloud-rain': [512, 'M96 320c-53 0-96-43-96-96c0-42.5 27.6-78.6 65.9-91.2C64.7 126.1 64 119.1 64 112C64 50.1 114.1 0 176 0c43.1 0 80.5 24.3 99.2 60c14.7-17.1 36.5-28 60.8-28c44.2 0 80 35.8 80 80c0 5.5-.6 10.8-1.6 16c.5 0 1.1 0 1.6 0c53 0 96 43 96 96s-43 96-96 96H96zm-6.8 52c1.3-2.5 3.9-4 6.8-4s5.4 1.5 6.8 4l35.1 64.6c4.1 7.5 6.2 15.8 6.2 24.3v3c0 26.5-21.5 48-48 48s-48-21.5-48-48v-3c0-8.5 2.1-16.9 6.2-24.3L89.2 372zm160 0c1.3-2.5 3.9-4 6.8-4s5.4 1.5 6.8 4l35.1 64.6c4.1 7.5 6.2 15.8 6.2 24.3v3c0 26.5-21.5 48-48 48s-48-21.5-48-48v-3c0-8.5 2.1-16.9 6.2-24.3L249.2 372zm124.9 64.6L409.2 372c1.3-2.5 3.9-4 6.8-4s5.4 1.5 6.8 4l35.1 64.6c4.1 7.5 6.2 15.8 6.2 24.3v3c0 26.5-21.5 48-48 48s-48-21.5-48-48v-3c0-8.5 2.1-16.9 6.2-24.3z'],
+            'cloud-showers-heavy': [512, 'M96 320c-53 0-96-43-96-96c0-42.5 27.6-78.6 65.9-91.2C64.7 126.1 64 119.1 64 112C64 50.1 114.1 0 176 0c43.1 0 80.5 24.3 99.2 60c14.7-17.1 36.5-28 60.8-28c44.2 0 80 35.8 80 80c0 5.5-.6 10.8-1.6 16c.5 0 1.1 0 1.6 0c53 0 96 43 96 96s-43 96-96 96H96zM81.5 353.9c12.2 5.2 17.8 19.3 12.6 31.5l-48 112c-5.2 12.2-19.3 17.8-31.5 12.6S-3.3 490.7 1.9 478.5l48-112c5.2-12.2 19.3-17.8 31.5-12.6zm120 0c12.2 5.2 17.8 19.3 12.6 31.5l-48 112c-5.2 12.2-19.3 17.8-31.5 12.6s-17.8-19.3-12.6-31.5l48-112c5.2-12.2 19.3-17.8 31.5-12.6zm244.6 31.5l-48 112c-5.2 12.2-19.3 17.8-31.5 12.6s-17.8-19.3-12.6-31.5l48-112c5.2-12.2 19.3-17.8 31.5-12.6s17.8 19.3 12.6 31.5zM313.5 353.9c12.2 5.2 17.8 19.3 12.6 31.5l-48 112c-5.2 12.2-19.3 17.8-31.5 12.6s-17.8-19.3-12.6-31.5l48-112c5.2-12.2 19.3-17.8 31.5-12.6z'],
+            'cloud-sun-rain': [640, 'M294.2 1.2c5.1 2.1 8.7 6.7 9.6 12.1l10.4 62.4c-23.3 10.8-42.9 28.4-56 50.3c-14.6-9-31.8-14.1-50.2-14.1c-53 0-96 43-96 96c0 35.5 19.3 66.6 48 83.2c.8 31.8 13.2 60.7 33.1 82.7l-56 39.2c-4.5 3.2-10.3 3.8-15.4 1.6s-8.7-6.7-9.6-12.1L98.1 317.9 13.4 303.8c-5.4-.9-10-4.5-12.1-9.6s-1.5-10.9 1.6-15.4L52.5 208 2.9 137.2c-3.2-4.5-3.8-10.3-1.6-15.4s6.7-8.7 12.1-9.6L98.1 98.1l14.1-84.7c.9-5.4 4.5-10 9.6-12.1s10.9-1.5 15.4 1.6L208 52.5 278.8 2.9c4.5-3.2 10.3-3.8 15.4-1.6zM208 144c13.8 0 26.7 4.4 37.1 11.9c-1.2 4.1-2.2 8.3-3 12.6c-37.9 14.6-67.2 46.6-77.8 86.4C151.8 243.1 144 226.5 144 208c0-35.3 28.7-64 64-64zm69.4 276c11 7.4 14 22.3 6.7 33.3l-32 48c-7.4 11-22.3 14-33.3 6.7s-14-22.3-6.7-33.3l32-48c7.4-11 22.3-14 33.3-6.7zm96 0c11 7.4 14 22.3 6.7 33.3l-32 48c-7.4 11-22.3 14-33.3 6.7s-14-22.3-6.7-33.3l32-48c7.4-11 22.3-14 33.3-6.7zm96 0c11 7.4 14 22.3 6.7 33.3l-32 48c-7.4 11-22.3 14-33.3 6.7s-14-22.3-6.7-33.3l32-48c7.4-11 22.3-14 33.3-6.7zm96 0c11 7.4 14 22.3 6.7 33.3l-32 48c-7.4 11-22.3 14-33.3 6.7s-14-22.3-6.7-33.3l32-48c7.4-11 22.3-14 33.3-6.7zm74.5-116.1c0 44.2-35.8 80-80 80H288c-53 0-96-43-96-96c0-47.6 34.6-87 80-94.6l0-1.3c0-53 43-96 96-96c34.9 0 65.4 18.6 82.2 46.4c13-9.1 28.8-14.4 45.8-14.4c44.2 0 80 35.8 80 80c0 5.9-.6 11.7-1.9 17.2c37.4 6.7 65.8 39.4 65.8 78.7z'],
+            'cloud-sun': [640, 'M294.2 1.2c5.1 2.1 8.7 6.7 9.6 12.1l14.1 84.7 84.7 14.1c5.4 .9 10 4.5 12.1 9.6s1.5 10.9-1.6 15.4l-38.5 55c-2.2-.1-4.4-.2-6.7-.2c-23.3 0-45.1 6.2-64 17.1l0-1.1c0-53-43-96-96-96s-96 43-96 96s43 96 96 96c8.1 0 15.9-1 23.4-2.9c-36.6 18.1-63.3 53.1-69.8 94.9l-24.4 17c-4.5 3.1-10.3 3.8-15.4 1.6s-8.7-6.7-9.6-12.1L98.1 317.9 13.4 303.8c-5.4-.9-10-4.5-12.1-9.6s-1.5-10.9 1.6-15.4L52.5 208 2.9 137.2c-3.2-4.5-3.8-10.3-1.6-15.4s6.7-8.7 12.1-9.6L98.1 98.1l14.1-84.7c.9-5.4 4.5-10 9.6-12.1s10.9-1.5 15.4 1.6L208 52.5 278.8 2.9c4.5-3.2 10.3-3.8 15.4-1.6zM144 208a64 64 0 1 1 128 0 64 64 0 1 1 -128 0zM639.9 431.9c0 44.2-35.8 80-80 80H288c-53 0-96-43-96-96c0-47.6 34.6-87 80-94.6l0-1.3c0-53 43-96 96-96c34.9 0 65.4 18.6 82.2 46.4c13-9.1 28.8-14.4 45.8-14.4c44.2 0 80 35.8 80 80c0 5.9-.6 11.7-1.9 17.2c37.4 6.7 65.8 39.4 65.8 78.7z'],
+            'cloud': [640, 'M0 336c0 79.5 64.5 144 144 144H512c70.7 0 128-57.3 128-128c0-61.9-44-113.6-102.4-125.4c4.1-10.7 6.4-22.4 6.4-34.6c0-53-43-96-96-96c-19.7 0-38.1 6-53.3 16.2C367 64.2 315.3 32 256 32C167.6 32 96 103.6 96 192c0 2.7 .1 5.4 .2 8.1C40.2 219.8 0 273.2 0 336z'],
+            'moon': [384, 'M223.5 32C100 32 0 132.3 0 256S100 480 223.5 480c60.6 0 115.5-24.2 155.8-63.4c5-4.9 6.3-12.5 3.1-18.7s-10.1-9.7-17-8.5c-9.8 1.7-19.8 2.6-30.1 2.6c-96.9 0-175.5-78.8-175.5-176c0-65.8 36-123.1 89.3-153.3c6.1-3.5 9.2-10.5 7.7-17.3s-7.3-11.9-14.3-12.5c-6.3-.5-12.6-.8-19-.8z'],
+            'smog': [640, 'M32 144c0 79.5 64.5 144 144 144H299.3c22.6 19.9 52.2 32 84.7 32s62.1-12.1 84.7-32H496c61.9 0 112-50.1 112-112s-50.1-112-112-112c-10.7 0-21 1.5-30.8 4.3C443.8 27.7 401.1 0 352 0c-32.6 0-62.4 12.2-85.1 32.3C242.1 12.1 210.5 0 176 0C96.5 0 32 64.5 32 144zM616 368H280c-13.3 0-24 10.7-24 24s10.7 24 24 24H616c13.3 0 24-10.7 24-24s-10.7-24-24-24zm-64 96H440c-13.3 0-24 10.7-24 24s10.7 24 24 24H552c13.3 0 24-10.7 24-24s-10.7-24-24-24zm-192 0H24c-13.3 0-24 10.7-24 24s10.7 24 24 24H360c13.3 0 24-10.7 24-24s-10.7-24-24-24zM224 392c0-13.3-10.7-24-24-24H96c-13.3 0-24 10.7-24 24s10.7 24 24 24H200c13.3 0 24-10.7 24-24z'],
+            'snowflake': [448, 'M224 0c17.7 0 32 14.3 32 32V62.1l15-15c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9l-49 49v70.3l61.4-35.8 17.7-66.1c3.4-12.8 16.6-20.4 29.4-17s20.4 16.6 17 29.4l-5.2 19.3 23.6-13.8c15.3-8.9 34.9-3.7 43.8 11.5s3.8 34.9-11.5 43.8l-25.3 14.8 21.7 5.8c12.8 3.4 20.4 16.6 17 29.4s-16.6 20.4-29.4 17l-67.7-18.1L287.5 256l60.9 35.5 67.7-18.1c12.8-3.4 26 4.2 29.4 17s-4.2 26-17 29.4l-21.7 5.8 25.3 14.8c15.3 8.9 20.4 28.5 11.5 43.8s-28.5 20.4-43.8 11.5l-23.6-13.8 5.2 19.3c3.4 12.8-4.2 26-17 29.4s-26-4.2-29.4-17l-17.7-66.1L256 311.7v70.3l49 49c9.4 9.4 9.4 24.6 0 33.9s-24.6 9.4-33.9 0l-15-15V480c0 17.7-14.3 32-32 32s-32-14.3-32-32V449.9l-15 15c-9.4 9.4-24.6 9.4-33.9 0s-9.4-24.6 0-33.9l49-49V311.7l-61.4 35.8-17.7 66.1c-3.4 12.8-16.6 20.4-29.4 17s-20.4-16.6-17-29.4l5.2-19.3L48.1 395.6c-15.3 8.9-34.9 3.7-43.8-11.5s-3.7-34.9 11.5-43.8l25.3-14.8-21.7-5.8c-12.8-3.4-20.4-16.6-17-29.4s16.6-20.4 29.4-17l67.7 18.1L160.5 256 99.6 220.5 31.9 238.6c-12.8 3.4-26-4.2-29.4-17s4.2-26 17-29.4l21.7-5.8L15.9 171.6C.6 162.7-4.5 143.1 4.4 127.9s28.5-20.4 43.8-11.5l23.6 13.8-5.2-19.3c-3.4-12.8 4.2-26 17-29.4s26 4.2 29.4 17l17.7 66.1L192 200.3V129.9L143 81c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l15 15V32c0-17.7 14.3-32 32-32z'],
+            'sun': [512, 'M361.5 1.2c5 2.1 8.6 6.6 9.6 11.9L391 121l107.9 19.8c5.3 1 9.8 4.6 11.9 9.6s1.5 10.7-1.6 15.2L446.9 256l62.3 90.3c3.1 4.5 3.7 10.2 1.6 15.2s-6.6 8.6-11.9 9.6L391 391 371.1 498.9c-1 5.3-4.6 9.8-9.6 11.9s-10.7 1.5-15.2-1.6L256 446.9l-90.3 62.3c-4.5 3.1-10.2 3.7-15.2 1.6s-8.6-6.6-9.6-11.9L121 391 13.1 371.1c-5.3-1-9.8-4.6-11.9-9.6s-1.5-10.7 1.6-15.2L65.1 256 2.8 165.7c-3.1-4.5-3.7-10.2-1.6-15.2s6.6-8.6 11.9-9.6L121 121 140.9 13.1c1-5.3 4.6-9.8 9.6-11.9s10.7-1.5 15.2 1.6L256 65.1 346.3 2.8c4.5-3.1 10.2-3.7 15.2-1.6zM160 256a96 96 0 1 1 192 0 96 96 0 1 1 -192 0zm224 0a128 128 0 1 0 -256 0 128 128 0 1 0 256 0z']
+        };
+        // Night swaps sun-based icons for their moon twin (clear -> moon, partly cloudy -> cloud-moon).
+        function nightIcon(name) {
+            return { 'sun': 'moon', 'cloud-sun': 'cloud-moon', 'cloud-sun-rain': 'cloud-moon-rain' }[name] || name;
+        }
+
+        function weatherSvg(name) {
+            var icon = WEATHER_ICONS[name] || WEATHER_ICONS['cloud-sun'];
+            return '<svg class="wx-icon" viewBox="0 0 ' + icon[0] + ' 512" aria-hidden="true"><path d="' + icon[1] + '"/></svg>';
+        }
+
         var WMO_CODES = {
-            0: ['☀️', 'Clear Sky'], 1: ['🌤️', 'Mostly Clear'], 2: ['⛅', 'Partly Cloudy'],
-            3: ['☁️', 'Overcast'], 45: ['🌫️', 'Foggy'], 51: ['🌦️', 'Light Drizzle'],
-            61: ['🌧️', 'Rain'], 63: ['🌧️', 'Moderate Rain'], 71: ['❄️', 'Snow'],
-            80: ['🌦️', 'Rain Showers'], 95: ['⛈️', 'Thunderstorm']
+            0: ['sun', 'Céu limpo'], 1: ['cloud-sun', 'Poucas nuvens'], 2: ['cloud-sun', 'Parcialmente nublado'],
+            3: ['cloud', 'Nublado'], 45: ['smog', 'Neblina'], 51: ['cloud-sun-rain', 'Garoa'],
+            61: ['cloud-rain', 'Chuva'], 63: ['cloud-showers-heavy', 'Chuva forte'], 71: ['snowflake', 'Neve'],
+            80: ['cloud-sun-rain', 'Pancadas de chuva'], 95: ['cloud-bolt', 'Tempestade']
         };
 
         // Written as .then() chains (no async/await) and guarded against a
@@ -1248,8 +1608,7 @@
         // synchronously and abort the rest of the boot sequence below it.
         function fetchWeather() {
             if (typeof fetch !== 'function') {
-                document.getElementById('weatherText').textContent = '22°C • Clear';
-                document.getElementById('weatherSub').textContent = state.city || 'Offline Mode';
+                showWeatherOffline();
                 return;
             }
 
@@ -1313,25 +1672,26 @@
                         var temp = Math.round(data.current.temperature_2m);
                         var code = data.current.weather_code;
                         var isDay = data.current.is_day === 1;
-                        var wmo = WMO_CODES[code] || ['⛅', 'Fair'];
+                        var wmo = WMO_CODES[code] || ['cloud-sun', 'Tempo bom'];
 
-                        document.getElementById('weatherIcon').textContent = isDay ? wmo[0] : '🌙';
-                        document.getElementById('weatherText').textContent = temp + '°C • ' + wmo[1];
+                        var iconName = isDay ? wmo[0] : nightIcon(wmo[0]);
+                        document.getElementById('weatherIcon').innerHTML = weatherSvg(iconName);
+                        document.getElementById('weatherTemp').textContent = temp + '°';
+                        document.getElementById('weatherText').textContent = wmo[1];
 
-                        var sunsetStr = '';
                         if (data.daily) {
                             if (data.daily.sunrise && data.daily.sunrise[0]) {
                                 state.sunrise = data.daily.sunrise[0].split('T')[1];
                             }
                             if (data.daily.sunset && data.daily.sunset[0]) {
                                 state.sunset = data.daily.sunset[0].split('T')[1];
-                                sunsetStr = ' • Sunset ' + state.sunset;
                                 var sunsetHour = parseInt(state.sunset.split(':')[0], 10);
                                 state.isSunset = Math.abs(localNow.getUTCHours() - sunsetHour) <= 1;
                             }
                         }
                         state.isNight = !isDay;
-                        document.getElementById('weatherSub').textContent = cityLabel + sunsetStr;
+                        // Sunrise/sunset live in the weather drawer; the widget stays short.
+                        document.getElementById('weatherSub').textContent = cityLabel;
                         applyTheme();
                     }
 
@@ -1352,10 +1712,59 @@
 
                     renderDrawerForecast();
                 })
-                .catch(function(err) {
-                    document.getElementById('weatherText').textContent = '22°C • Clear';
-                    document.getElementById('weatherSub').textContent = state.city || 'Offline Mode';
-                });
+                .catch(showWeatherOffline);
+        }
+
+        function showWeatherOffline() {
+            document.getElementById('weatherTemp').textContent = '--°';
+            document.getElementById('weatherText').textContent = 'Sem conexão';
+            document.getElementById('weatherSub').textContent = state.city || 'Clima indisponível';
+        }
+
+        // TMDB watch-provider IDs (Brazil, subscription) -> Zen catalog app, so OK on the banner opens the right app.
+        var PROVIDER_APPS = {
+            8: 'netflix',
+            119: 'amazon',
+            337: 'com.disney.disneyplus-prod',
+            307: 'globoplaywebos',
+            283: 'com.crunchyroll.webapp'
+        };
+
+        // Where each trending title streams in Brazil (TMDB /watch/providers, data by JustWatch).
+        // One request per title, in parallel, after the carousel is already showing.
+        function loadWatchProviders(items, mediaPath, key, headers) {
+            items.forEach(function(pick) {
+                var url = 'https://api.themoviedb.org/3/' + mediaPath + '/' + pick.tmdbId + '/watch/providers'
+                    + (key.length > 40 ? '' : '?api_key=' + encodeURIComponent(key));
+                fetch(url, { headers: headers })
+                    .then(function(res) { return res.json(); })
+                    .then(function(data) {
+                        var br = data && data.results && data.results.BR;
+                        // Drop "... with Ads" tiers: same service and logo as the plan listed next to it.
+                        var flat = ((br && br.flatrate) || []).filter(function(p) { return !/with ads$/i.test(p.provider_name || ''); });
+                        pick.providers = flat.slice(0, 3);
+                        // Prefer a provider already on the shelf, then any app Zen knows.
+                        var mapped = flat.map(function(p) { return PROVIDER_APPS[p.provider_id]; }).filter(Boolean);
+                        pick.app = arrFind(mapped, function(id) { return state.favorites.indexOf(id) !== -1; }) || mapped[0] || null;
+                        if (heroPicks === items && heroPicks[heroIndex] === pick) renderHeroMeta(pick);
+                    })
+                    .catch(function() {});
+            });
+        }
+
+        // Metadata line: "2026 · Filme · 7,6★" followed by the streaming services' logos.
+        // Provider names/paths come from TMDB, so names go in as alt text and paths are checked before use.
+        function renderHeroMeta(pick) {
+            heroTag.textContent = pick.badge || '';
+            (pick.providers || []).forEach(function(p) {
+                if (!/^\/[\w.-]+$/.test(p.logo_path || '')) return;
+                var img = document.createElement('img');
+                img.className = 'provider-logo';
+                img.src = 'https://image.tmdb.org/t/p/w92' + p.logo_path;
+                img.alt = p.provider_name || '';
+                img.title = p.provider_name || '';
+                heroTag.appendChild(img);
+            });
         }
 
         // --- Live Trending Picks (TMDB + Live TVMaze Zero-Key Feed), split by Movies/Shows tab ---
@@ -1380,29 +1789,31 @@
             if (state.tmdbKey && state.tmdbKey.trim().length > 8) {
                 var key = state.tmdbKey.trim();
                 var headers = key.length > 40 ? { 'Authorization': 'Bearer ' + key } : {};
-                var url = key.length > 40
-                    ? 'https://api.themoviedb.org/3/trending/' + tmdbMediaPath + '/week?language=en-US'
-                    : 'https://api.themoviedb.org/3/trending/' + tmdbMediaPath + '/week?api_key=' + encodeURIComponent(key);
+                var url = 'https://api.themoviedb.org/3/trending/' + tmdbMediaPath + '/week?language=pt-BR'
+                    + (key.length > 40 ? '' : '&api_key=' + encodeURIComponent(key));
 
                 tmdbPromise = fetch(url, { headers: headers })
                     .then(function(res) { return res.json(); })
                     .then(function(data) {
                         if (data.results && data.results.length >= 4 && tab === state.picksTab) {
-                            var items = data.results.slice(0, 4).map(function(item) {
+                            var items = data.results.slice(0, 8).map(function(item) {
                                 var title = item.title || item.name || 'Trending';
-                                var score = item.vote_average ? item.vote_average.toFixed(1) + '★' : 'Hot';
+                                var score = item.vote_average ? item.vote_average.toFixed(1).replace('.', ',') + '★' : 'Em alta';
                                 return {
                                     title: title,
-                                    badge: (tab === 'shows' ? 'Series' : 'Movie') + ' • ' + score,
+                                    badge: [(item.release_date || item.first_air_date || '').slice(0, 4), tab === 'shows' ? 'Série' : 'Filme', score].filter(Boolean).join(' · '),
                                     service: 'TMDB Trending',
-                                    app: 'netflix',
+                                    app: null, // filled from watch providers below; null = not on any Zen app
+                                    tmdbId: item.id,
                                     desc: item.overview || 'Trending worldwide this week.',
                                     poster: item.poster_path ? 'https://image.tmdb.org/t/p/w300' + item.poster_path : '',
+                                    backdrop: item.backdrop_path ? 'https://image.tmdb.org/t/p/w1280' + item.backdrop_path : '',
                                     color: '#0a84ff'
                                 };
                             });
                             badge.textContent = 'TMDB Live';
                             renderPicks(items);
+                            loadWatchProviders(items, tmdbMediaPath, key, headers);
                             return true;
                         }
                         return false;
@@ -1438,6 +1849,7 @@
                                                 app: 'netflix',
                                                 desc: cleanSummary || 'Critically acclaimed trending series.',
                                                 poster: s.image.medium,
+                                                backdrop: s.image.original,
                                                 color: '#0a84ff'
                                             };
                                         });
@@ -1472,6 +1884,18 @@
                                 var appId = lp.appId || lp.id;
                                 if (!appId) return;
                                 var exists = arrFind(state.catalog, function(c) { return c.id === appId; });
+                                // Catalog entries with a guessed ID (Twitch, Kick) adopt the installed app's real
+                                // ID by title, carrying their logo and any shelf slot over to the new ID.
+                                var byTitle = !exists && lp.title && arrFind(state.catalog, function(c) {
+                                    return c.title.toLowerCase() === lp.title.toLowerCase() && !isHDMI(c);
+                                });
+                                if (byTitle) {
+                                    byTitle.logo = byTitle.logo || APP_LOGOS[byTitle.id];
+                                    var favIdx = state.favorites.indexOf(byTitle.id);
+                                    if (favIdx !== -1) state.favorites[favIdx] = appId;
+                                    byTitle.id = appId;
+                                    exists = byTitle;
+                                }
                                 var iconUrl = launchPointIcon(lp);
                                 if (exists && iconUrl) exists.iconUrl = iconUrl;
                                 if (lp.systemApp && !exists) return;
@@ -1484,7 +1908,7 @@
                                         color: lp.iconColor || '#0a84ff',
                                         badge: (lp.title || 'APP').substring(0, 3).toUpperCase(),
                                         iconUrl: iconUrl,
-                                        bg: 'linear-gradient(135deg, ' + (lp.iconColor || '#2a344a') + ', #101420)'
+                                        bg: lp.iconColor || '#2c2c2e'
                                     });
                                 }
                             });
@@ -1573,24 +1997,26 @@
             var favItems = (shelfEdit || state.favorites)
                 .map(function(id) { return arrFind(state.catalog, function(c) { return c.id === id; }); })
                 .filter(Boolean)
-                .slice(0, 8);
+                .slice(0, 9);
 
             favItems.forEach(function(app) {
                 var device = devicePreset(app, state.hdmiDevices);
                 var title = device.title || app.title;
                 var btn = document.createElement('button');
-                btn.className = 'app-tile nav-item' + (movingTileId === app.id ? ' moving' : '');
+                // Only HDMI tiles without a console logo keep a visible name ("HDMI 2", "PC Gamer"):
+                // a generic input drawing alone can't tell them apart, a PS5 or Switch logo can.
+                btn.className = 'app-tile nav-item' + (isHDMI(app) && !device.logo ? ' has-label' : '') + (movingTileId === app.id ? ' moving' : '');
                 if (shelfEdit) btn.setAttribute('aria-pressed', String(movingTileId === app.id));
                 btn.dataset.id = app.id;
                 btn.dataset.tag = app.tag;
                 btn.dataset.title = title;
-                btn.dataset.desc = device.title ? 'Play ' + device.title + ' on ' + app.title + '.' : app.desc;
+                btn.dataset.desc = device.title ? device.title + ' no ' + app.title + '.' : app.desc;
                 btn.setAttribute('aria-label', title + (device.title ? ' — ' + app.title : ''));
                 btn.dataset.color = app.color;
 
                 var iconDiv = document.createElement('div');
                 iconDiv.className = 'app-icon';
-                iconDiv.style.background = app.bg || 'linear-gradient(135deg, #0a84ff, #0040a0)';
+                iconDiv.style.background = app.bg || '#2c2c2e';
                 if (isHDMI(app)) {
                     iconDiv.style.background = device.color;
                     if (device.logo) {
@@ -1607,7 +2033,7 @@
                     fallback.className = 'app-art-fallback';
                     fallback.textContent = app.title;
                     iconDiv.appendChild(fallback);
-                    var logo = APP_LOGOS[app.id];
+                    var logo = app.logo || APP_LOGOS[app.id];
                     if (logo || app.iconUrl) {
                         addTileImage(iconDiv, logo ? 'assets/brands/' + logo + '.svg' : app.iconUrl, !!logo);
                     }
@@ -1615,7 +2041,7 @@
 
                 var labelDiv = document.createElement('div');
                 labelDiv.className = 'app-label';
-                labelDiv.textContent = title + (device.title ? ' · ' + app.title : '');
+                labelDiv.textContent = title;
 
                 btn.appendChild(iconDiv);
                 btn.appendChild(labelDiv);
@@ -1628,48 +2054,15 @@
                 grid.appendChild(btn);
             });
 
-            document.getElementById('shelfCountHint').textContent = shelfEdit ? (movingTileId ? '← / → Move • OK Place • Back Cancel' : 'Select a tile • OK Pick up • Done to save') : favItems.length + ' Apps • Instant Launch';
+            document.getElementById('shelfCountHint').textContent = shelfEdit ? (movingTileId ? '← → move • OK solta • Voltar cancela' : 'Escolha um app • OK pega • Concluir salva') : '';
             refreshMainNavList();
         }
 
         function renderPicks(picks) {
-            var grid = document.getElementById('picksGrid');
-            grid.innerHTML = '';
-
-            picks.forEach(function(pick) {
-                var card = document.createElement('div');
-                card.className = 'pick-card nav-item';
-                card.dataset.app = pick.app;
-                card.dataset.tag = pick.badge;
-                card.dataset.title = pick.title;
-                card.dataset.desc = pick.desc;
-                card.dataset.color = pick.color || '#0a84ff';
-
-                var poster = document.createElement('div');
-                poster.className = 'pick-poster';
-                // Poster URLs come from third-party APIs, so only plain https URLs may enter the CSS url().
-                if (pick.poster && /^https:\/\/[^\s"'()\\]+$/.test(pick.poster)) {
-                    poster.style.backgroundImage = "url('" + pick.poster + "')";
-                }
-
-                // Pick text comes from TMDB/TVMaze (TVMaze is community-edited), so it is set as text, never HTML.
-                var meta = document.createElement('div');
-                meta.className = 'pick-meta';
-                [['pick-badge', pick.badge], ['pick-title', pick.title], ['pick-service', pick.service]].forEach(function(part) {
-                    var el = document.createElement('div');
-                    el.className = part[0];
-                    el.textContent = part[1];
-                    meta.appendChild(el);
-                });
-
-                card.appendChild(poster);
-                card.appendChild(meta);
-
-                card.addEventListener('mouseenter', function() { setMainFocus(card); });
-                card.addEventListener('click', function() { launchApp(pick.app); });
-                grid.appendChild(card);
-            });
-
+            heroPicks = picks;
+            heroDots.innerHTML = '';
+            picks.forEach(function() { heroDots.appendChild(document.createElement('span')); });
+            showHero(0);
             refreshMainNavList();
         }
 
@@ -1678,7 +2071,7 @@
             if (tile) setMainFocus(tile);
         }
         function moveShelfTile(direction) {
-            if (!shelfEdit || !movingTileId) { showToast('Select a tile first'); return; }
+            if (!shelfEdit || !movingTileId) { showToast('Escolha um app primeiro'); return; }
             var index = shelfEdit.indexOf(movingTileId);
             var destination = index + direction;
             if (index < 0 || destination < 0 || destination >= shelfEdit.length) return;
@@ -1691,28 +2084,32 @@
             if (!shelfEdit) return;
             if (save) {
                 try { localStorage.setItem('fmtv_favorites', JSON.stringify(shelfEdit)); }
-                catch (e) { showToast('Could not save the order. Please try again.', 5000); return; }
+                catch (e) { showToast('Não foi possível salvar a ordem. Tente de novo.', 5000); return; }
                 state.favorites = shelfEdit.slice();
             }
             shelfEdit = null;
             movingTileId = null;
-            document.getElementById('reorderShelfBtn').hidden = false;
             document.getElementById('shelfEditActions').hidden = true;
             renderAppsShelf();
-            setMainFocus(document.getElementById('reorderShelfBtn'));
-            showToast(save ? 'Tile order saved' : 'Reordering cancelled');
+            focusShelfTile(state.favorites[0]);
+            showToast(save ? 'Ordem salva' : 'Reordenação cancelada');
         }
-        document.getElementById('reorderShelfBtn').addEventListener('click', function() {
-            shelfEdit = state.favorites.slice();
+        // Started from Ajustes > Apps > Reordenar apps, using the app picks currently in the sheet.
+        function startShelfEdit(favorites) {
+            shelfEdit = favorites.slice();
             movingTileId = null;
-            this.hidden = true;
             document.getElementById('shelfEditActions').hidden = false;
             renderAppsShelf();
             focusShelfTile(shelfEdit[0]);
+        }
+        document.getElementById('reorderAppsRow').addEventListener('click', function() {
+            var picks = tempFavorites.slice();
+            closeSettingsModal();
+            startShelfEdit(picks);
         });
         document.getElementById('saveShelfOrder').addEventListener('click', function() { finishShelfEdit(true); });
         document.getElementById('cancelShelfOrder').addEventListener('click', function() { finishShelfEdit(false); });
-        document.querySelectorAll('#shelfEditActions button, #reorderShelfBtn').forEach(function(button) {
+        document.querySelectorAll('#shelfEditActions button').forEach(function(button) {
             button.addEventListener('mouseenter', function() { setMainFocus(button); });
         });
 
@@ -1726,7 +2123,11 @@
         var heroTag = document.getElementById('heroTag');
         var heroTitle = document.getElementById('heroTitle');
         var heroDesc = document.getElementById('heroDesc');
-        var ambientGlow = document.getElementById('ambientGlow');
+        var heroBanner = document.getElementById('heroBanner');
+        var heroBackdrop = document.getElementById('heroBackdrop');
+        var heroDots = document.getElementById('heroDots');
+        var heroPicks = [];
+        var heroIndex = 0;
 
         function refreshMainNavList() {
             mainNavItems = toArray(document.querySelectorAll(shelfEdit ? '.shelf-wrapper .nav-item' : '.nav-item')).filter(function(el) { return el.offsetParent !== null; });
@@ -1748,13 +2149,36 @@
             item.focus({ preventScroll: true });
             curIndex = mainNavItems.indexOf(item);
 
-            heroTag.textContent = item.dataset.tag || 'Selection';
-            heroTitle.textContent = item.dataset.title || '';
-            heroDesc.textContent = item.dataset.desc || '';
-
-            var color = item.dataset.color || '#0a84ff';
-            ambientGlow.style.background = 'radial-gradient(circle, ' + color + '35 0%, rgba(0,0,0,0) 70%)';
         }
+
+        // Pick text comes from TMDB/TVMaze (TVMaze is community-edited), so it is set as text, never HTML.
+        function showHero(i) {
+            if (!heroPicks.length) return;
+            heroIndex = (i + heroPicks.length) % heroPicks.length;
+            var pick = heroPicks[heroIndex];
+            renderHeroMeta(pick);
+            heroTitle.textContent = pick.title || '';
+            heroDesc.textContent = pick.desc || '';
+            // Image URLs come from third-party APIs, so only plain https URLs may enter the CSS url().
+            var art = pick.backdrop || pick.poster;
+            heroBackdrop.style.backgroundImage = art && /^https:\/\/[^\s"'()\\]+$/.test(art) ? "url('" + art + "')" : '';
+            toArray(heroDots.children).forEach(function(dot) { dot.classList.remove('active'); });
+            var activeDot = heroDots.children[heroIndex];
+            if (activeDot) {
+                void activeDot.offsetWidth; // reflow so the fill animation restarts even on the same dot
+                activeDot.classList.add('active');
+            }
+        }
+        // Auto-advance like the tvOS top shelf: the active dot's fill animation is the timer, so the bar
+        // and the slide change never drift apart, and pausing the animation (banner focused) pauses both.
+        heroDots.addEventListener('animationend', function() { showHero(heroIndex + 1); });
+        heroBanner.addEventListener('click', function() {
+            var pick = heroPicks[heroIndex];
+            if (!pick) return;
+            if (pick.app) launchApp(pick.app);
+            else showToast('Este título não está em nenhum streaming do Zen');
+        });
+        heroBanner.addEventListener('mouseenter', function() { setMainFocus(heroBanner); });
 
         // Geometric (position-based) focus movement for Up/Down: finds the nearest
         // nav-item strictly above/below the current one, weighted toward the same
@@ -1799,47 +2223,167 @@
         var settingsModal = document.getElementById('settingsModal');
         var tempFavorites = [];
         var tempDevices = {};
+        var tempSaver = 'art';
+        var tempSaverDelay = 3;
+        var tempArtFavs = [];
+
+        var SAVER_STYLES = [['art', 'Quadros de arte'], ['clock', 'Relógio'], ['off', 'Desligada']];
+        var SAVER_DELAYS = [[1, '1 minuto'], [3, '3 minutos'], [5, '5 minutos'], [10, '10 minutos'], [15, '15 minutos']];
+
+        // A checkmark list (iOS radio group) in the settings pane.
+        function renderRadioList(container, options, current, onPick) {
+            container.innerHTML = '';
+            options.forEach(function(opt, i) {
+                var row = settingsRow(opt[1]);
+                var check = document.createElement('span');
+                check.className = 'set-check';
+                check.textContent = opt[0] === current ? '✓' : '';
+                row.appendChild(check);
+                row.setAttribute('role', 'radio');
+                row.setAttribute('aria-checked', String(opt[0] === current));
+                row.addEventListener('click', function() {
+                    onPick(opt[0]);
+                    renderSaverOptions();
+                    refreshModalNavList();
+                    setModalFocus(container.children[i]);
+                });
+                container.appendChild(row);
+            });
+        }
+        function renderSaverOptions() {
+            renderRadioList(document.getElementById('saverStyleList'), SAVER_STYLES, tempSaver, function(v) { tempSaver = v; });
+            renderRadioList(document.getElementById('saverDelayList'), SAVER_DELAYS, tempSaverDelay, function(v) { tempSaverDelay = v; });
+            renderArtFavorites();
+        }
+
+        // Favourite artworks: thumbnail, title and artist, and a switch per work.
+        function renderArtFavorites() {
+            var list = document.getElementById('artFavList');
+            list.innerHTML = '';
+            ART_WORKS.forEach(function(work, i) {
+                var on = tempArtFavs.indexOf(work.slug) !== -1;
+                var row = settingsRow(work.title);
+                row.classList.add('art-row');
+                var thumb = document.createElement('img');
+                thumb.className = 'art-thumb';
+                thumb.src = 'assets/art/thumbs/' + work.slug + '.jpg';
+                thumb.alt = '';
+                row.insertBefore(thumb, row.firstChild);
+                var by = document.createElement('span');
+                by.className = 'art-by';
+                by.textContent = work.artist;
+                row.querySelector('.set-label').appendChild(by);
+                var toggle = document.createElement('span');
+                toggle.className = 'set-switch' + (on ? ' on' : '');
+                row.appendChild(toggle);
+                row.setAttribute('role', 'switch');
+                row.setAttribute('aria-checked', String(on));
+                row.addEventListener('click', function() {
+                    var idx = tempArtFavs.indexOf(work.slug);
+                    if (idx !== -1) tempArtFavs.splice(idx, 1);
+                    else tempArtFavs.push(work.slug);
+                    renderArtFavorites();
+                    refreshModalNavList();
+                    setModalFocus(list.children[i]);
+                });
+                list.appendChild(row);
+            });
+        }
+
+        document.getElementById('saverPreviewRow').addEventListener('click', function() {
+            var style = tempSaver === 'off' ? 'art' : tempSaver;
+            var favs = tempArtFavs.slice();
+            closeSettingsModal();
+            enterScreensaver(style, favs);
+        });
+
+        // Home-screen "Modo arte" button: start the paintings right away.
+        document.getElementById('artModeBtn').addEventListener('click', function() { enterScreensaver('art'); });
+        document.getElementById('artModeBtn').addEventListener('mouseenter', function() {
+            setMainFocus(document.getElementById('artModeBtn'));
+        });
 
         function openSettingsModal() {
             if (shelfEdit) return;
             modalOpen = true;
             tempFavorites = state.favorites.slice();
             tempDevices = shallowClone(state.hdmiDevices);
+            tempSaver = state.screensaver;
+            tempSaverDelay = state.screensaverDelay;
+            tempArtFavs = state.artFavorites.slice();
+            renderSaverOptions();
             renderHDMIOptions();
             document.getElementById('cfgCity').value = state.city;
-            document.getElementById('cfgTheme').value = state.theme;
             document.getElementById('cfgTmdbKey').value = state.tmdbKey;
 
             renderAppSelectorGrid();
-            settingsModal.classList.add('active');
-            refreshModalNavList();
+            animatePopup(settingsModal, settingsModal.querySelector('.modal-box'), true, MODAL_HIDDEN);
+            showSettingsPane('apps');
+            setModalFocus(sideItem('apps'));
         }
 
         function renderHDMIOptions() {
             var container = document.getElementById('hdmiOptions');
             container.innerHTML = '';
             state.catalog.filter(isHDMI).forEach(function(app) {
-                var button = document.createElement('button');
-                button.className = 'app-toggle-item modal-nav';
+                var button = settingsRow(app.title, '', true);
                 function updateLabel() {
-                    button.textContent = app.title + ': ' + (devicePreset(app, tempDevices).title || 'HDMI');
-                    button.setAttribute('aria-label', button.textContent + '. Press to change device');
+                    var device = devicePreset(app, tempDevices).title || 'Padrão';
+                    button.querySelector('.set-value').textContent = device;
+                    button.setAttribute('aria-label', app.title + ': ' + device + '. Pressione para trocar o aparelho');
                 }
                 updateLabel();
-                button.addEventListener('click', function() {
-                    var current = DEVICE_PRESETS.indexOf(devicePreset(app, tempDevices));
-                    tempDevices[app.id] = DEVICE_PRESETS[(current + 1) % DEVICE_PRESETS.length].key;
-                    updateLabel();
-                    refreshModalNavList();
-                    setModalFocus(button);
-                });
+                button.addEventListener('click', function() { openHdmiPage(app); });
                 container.appendChild(button);
             });
         }
 
+        // Picker for one HDMI input, shown in place of the HDMI list inside the right pane.
+        var hdmiEditing = null;
+        function openHdmiPage(app) {
+            hdmiEditing = app;
+            document.getElementById('hdmiPageTitle').textContent = app.title;
+            renderHdmiDeviceList();
+            showHdmiPicker(true);
+        }
+        function showHdmiPicker(show, silent) {
+            document.getElementById('hdmiListView').hidden = show;
+            document.getElementById('hdmiPickerView').hidden = !show;
+            if (silent) return;
+            modalNavItems = collectModalNav();
+            // Back from the picker lands on the HDMI row it was opened from.
+            var rows = toArray(document.querySelectorAll('#hdmiOptions .set-row'));
+            setModalFocus(show ? document.querySelector('#hdmiDeviceList .set-row[aria-checked="true"]')
+                : rows[state.catalog.filter(isHDMI).indexOf(hdmiEditing)] || rows[0]);
+        }
+        function renderHdmiDeviceList() {
+            var list = document.getElementById('hdmiDeviceList');
+            var current = devicePreset(hdmiEditing, tempDevices).key;
+            list.innerHTML = '';
+            DEVICE_PRESETS.forEach(function(preset) {
+                var row = settingsRow(preset.title || 'Nenhum (mostrar "' + hdmiEditing.title + '")');
+                var check = document.createElement('span');
+                check.className = 'set-check';
+                check.textContent = preset.key === current ? '✓' : '';
+                row.appendChild(check);
+                row.setAttribute('role', 'radio');
+                row.setAttribute('aria-checked', String(preset.key === current));
+                row.addEventListener('click', function() {
+                    if (preset.key === 'default') delete tempDevices[hdmiEditing.id];
+                    else tempDevices[hdmiEditing.id] = preset.key;
+                    renderHdmiDeviceList();
+                    renderHDMIOptions();
+                    refreshModalNavList();
+                    setModalFocus(list.children[DEVICE_PRESETS.indexOf(preset)]);
+                });
+                list.appendChild(row);
+            });
+        }
+
+        var MODAL_HIDDEN = { opacity: 0, scale: 0.94 };
         function closeSettingsModal() {
             modalOpen = false;
-            settingsModal.classList.remove('active');
+            animatePopup(settingsModal, settingsModal.querySelector('.modal-box'), false, MODAL_HIDDEN);
             setMainFocus(mainNavItems[curIndex]);
         }
 
@@ -1849,41 +2393,121 @@
 
             state.catalog.forEach(function(app) {
                 var isSelected = tempFavorites.indexOf(app.id) !== -1;
-                var item = document.createElement('div');
-                item.className = 'app-toggle-item modal-nav' + (isSelected ? ' selected' : '');
-                // Installed app titles come from listLaunchPoints, so they are set as text.
-                var titleSpan = document.createElement('span');
-                titleSpan.textContent = app.title;
-                var markSpan = document.createElement('span');
-                markSpan.textContent = isSelected ? '✓' : '+';
-                item.appendChild(titleSpan);
-                item.appendChild(markSpan);
+                var item = settingsRow(app.title);
+                var toggle = document.createElement('span');
+                toggle.className = 'set-switch' + (isSelected ? ' on' : '');
+                item.appendChild(toggle);
+                item.setAttribute('role', 'switch');
+                item.setAttribute('aria-checked', String(isSelected));
 
                 item.addEventListener('click', function() {
                     var idx = tempFavorites.indexOf(app.id);
                     if (idx !== -1) {
                         if (tempFavorites.length > 1) tempFavorites.splice(idx, 1);
-                    } else if (tempFavorites.length < 8) {
+                        else showToast('Deixe pelo menos 1 app');
+                    } else if (tempFavorites.length < 9) {
                         tempFavorites.push(app.id);
                     } else {
-                        showToast('Max 8 apps on shelf');
+                        showToast('Máximo de 9 apps');
                     }
                     renderAppSelectorGrid();
                     refreshModalNavList();
                 });
                 container.appendChild(item);
             });
+            document.getElementById('appsCountValue').textContent = tempFavorites.length + (tempFavorites.length === 1 ? ' app' : ' apps');
+        }
+
+        // One iOS-style list row. Installed app titles come from listLaunchPoints, so they are set as text.
+        function settingsRow(label, value, chevron) {
+            var row = document.createElement('button');
+            row.className = 'set-row modal-nav';
+            var labelSpan = document.createElement('span');
+            labelSpan.className = 'set-label';
+            labelSpan.textContent = label;
+            row.appendChild(labelSpan);
+            if (value !== undefined) {
+                var valueSpan = document.createElement('span');
+                valueSpan.className = 'set-value';
+                valueSpan.textContent = value;
+                row.appendChild(valueSpan);
+            }
+            if (chevron) {
+                var chev = document.createElement('span');
+                chev.className = 'set-chev';
+                chev.textContent = '›';
+                row.appendChild(chev);
+            }
+            return row;
+        }
+
+        // --- Split-view settings: sidebar of categories (left), the active category's pane (right) ---
+        var settingsPane = 'apps';
+        function sideItem(name) { return settingsModal.querySelector('.side-item[data-pane="' + name + '"]'); }
+
+        // Shows one category's options. Like tvOS, the pane follows sidebar focus.
+        function showSettingsPane(name) {
+            showHdmiPicker(false, true);
+            settingsPane = name;
+            toArray(settingsModal.querySelectorAll('.pane')).forEach(function(p) { p.hidden = p.dataset.pane !== name; });
+            toArray(settingsModal.querySelectorAll('.side-item')).forEach(function(s) { s.classList.toggle('active', s.dataset.pane === name); });
+            settingsModal.querySelector('.settings-scroll').scrollTop = 0;
+            var pane = settingsModal.querySelector('.pane[data-pane="' + name + '"]');
+            if (window.Motion) Motion.animate(pane, { x: [24, 0], opacity: [0, 1] }, { duration: 0.25 });
+            modalNavItems = collectModalNav();
+        }
+        toArray(settingsModal.querySelectorAll('.side-item')).forEach(function(item) {
+            item.addEventListener('click', function() {
+                showSettingsPane(item.dataset.pane);
+                setModalFocus(firstPaneItem() || item);
+            });
+        });
+        document.getElementById('hdmiBackBtn').addEventListener('click', function() { showHdmiPicker(false); });
+
+        function collectModalNav() {
+            return toArray(settingsModal.querySelectorAll('.modal-nav:not(:disabled)')).filter(function(el) { return el.offsetParent !== null; });
+        }
+        function settingsZone(el) {
+            return el.closest('.settings-top') ? 'top' : el.closest('.settings-side') ? 'side' : 'pane';
+        }
+        function firstPaneItem() {
+            return arrFind(modalNavItems, function(el) { return settingsZone(el) === 'pane'; });
+        }
+        // Two-column remote navigation: ↑↓ move within a column, → enters the pane, ← returns to the sidebar,
+        // ↑ from the top of the sidebar reaches Cancelar/Salvar.
+        function settingsMove(el, key) {
+            var zone = settingsZone(el);
+            var items = modalNavItems.filter(function(i) { return settingsZone(i) === zone; });
+            var i = items.indexOf(el);
+            if (zone === 'top') {
+                if (key === 'ArrowLeft') return items[i - 1];
+                if (key === 'ArrowRight') return items[i + 1];
+                if (key === 'ArrowDown') return sideItem(settingsPane);
+            } else if (zone === 'side') {
+                if (key === 'ArrowUp') return i > 0 ? items[i - 1] : document.getElementById('closeModalBtn');
+                if (key === 'ArrowDown') return items[i + 1];
+                if (key === 'ArrowRight') return firstPaneItem();
+            } else {
+                if (key === 'ArrowUp') return items[i - 1];
+                if (key === 'ArrowDown') return items[i + 1];
+                if (key === 'ArrowLeft') return sideItem(settingsPane);
+            }
+            return null;
         }
 
         function refreshModalNavList() {
-            modalNavItems = toArray(settingsModal.querySelectorAll('.modal-nav:not(:disabled)'));
-            modalIndex = Math.min(modalIndex, modalNavItems.length - 1);
+            // Keep focus on the same element when it survives, else on the same position (re-rendered rows).
+            var current = modalNavItems[modalIndex];
+            modalNavItems = collectModalNav();
+            var idx = modalNavItems.indexOf(current);
+            modalIndex = idx !== -1 ? idx : Math.min(modalIndex, modalNavItems.length - 1);
             setModalFocus(modalNavItems[modalIndex]);
         }
 
         function setModalFocus(el) {
             if (!el) return;
-            modalNavItems.forEach(function(i) { i.classList.remove('focused'); });
+            if (el.classList.contains('side-item') && el.dataset.pane !== settingsPane) showSettingsPane(el.dataset.pane);
+            toArray(settingsModal.querySelectorAll('.focused')).forEach(function(i) { i.classList.remove('focused'); });
             el.classList.add('focused');
             el.focus();
             modalIndex = modalNavItems.indexOf(el);
@@ -1923,22 +2547,30 @@
         var closeDrawerBtn = document.getElementById('closeDrawerBtn');
         var drawerOpen = false;
 
+        // "HH:MM" strings compare correctly as text; unknown sun times mean "day".
+        function isNightHour(hhmm) {
+            return !!(state.sunrise && state.sunset) && (hhmm < state.sunrise || hhmm >= state.sunset);
+        }
+
         function renderDrawerForecast() {
-            document.getElementById('drawerIcon').textContent = document.getElementById('weatherIcon').textContent;
-            document.getElementById('drawerTemp').textContent = document.getElementById('weatherText').textContent;
-            document.getElementById('drawerCityLabel').textContent = document.getElementById('weatherSub').textContent;
+            document.getElementById('drawerIcon').innerHTML = document.getElementById('weatherIcon').innerHTML;
+            document.getElementById('drawerTemp').textContent = document.getElementById('weatherTemp').textContent;
+            document.getElementById('drawerCond').textContent = document.getElementById('weatherText').textContent;
+            document.getElementById('drawerCity').textContent = document.getElementById('weatherSub').textContent;
+            document.getElementById('drawerSunriseIcon').innerHTML = weatherSvg('sun');
+            document.getElementById('drawerSunsetIcon').innerHTML = weatherSvg('moon');
             document.getElementById('drawerSunrise').textContent = state.sunrise || '--:--';
             document.getElementById('drawerSunset').textContent = state.sunset || '--:--';
 
             var hourlyEl = document.getElementById('drawerHourly');
             hourlyEl.innerHTML = '';
             state.hourlyForecast.forEach(function(h) {
-                var wmo = WMO_CODES[h.code] || ['⛅', 'Fair'];
+                var wmo = WMO_CODES[h.code] || ['cloud-sun', 'Tempo bom'];
                 var chip = document.createElement('div');
                 chip.className = 'drawer-hour-chip';
                 chip.innerHTML =
                     '<div class="drawer-hour-time">' + h.hour + '</div>' +
-                    '<div class="drawer-hour-icon">' + wmo[0] + '</div>' +
+                    '<div class="drawer-hour-icon">' + weatherSvg(isNightHour(h.hour) ? nightIcon(wmo[0]) : wmo[0]) + '</div>' +
                     '<div class="drawer-hour-temp">' + h.temp + '°</div>';
                 hourlyEl.appendChild(chip);
             });
@@ -1947,28 +2579,96 @@
         function openDrawer() {
             if (shelfEdit) return;
             drawerOpen = true;
-            weatherDrawer.classList.add('active');
+            animatePopup(weatherDrawer, weatherDrawer.querySelector('.weather-panel'), true, MODAL_HIDDEN);
             closeDrawerBtn.classList.add('focused');
             closeDrawerBtn.focus();
         }
 
         function closeDrawer() {
             drawerOpen = false;
-            weatherDrawer.classList.remove('active');
+            animatePopup(weatherDrawer, weatherDrawer.querySelector('.weather-panel'), false, MODAL_HIDDEN);
             closeDrawerBtn.classList.remove('focused');
             setMainFocus(mainNavItems[curIndex]);
         }
 
         closeDrawerBtn.addEventListener('click', closeDrawer);
 
-        // --- OLED-Safe Idle Screensaver ---
-        var IDLE_TIMEOUT_MS = 3 * 60 * 1000;
+        // --- Idle Screensaver: art paintings (Frame-TV style) or the OLED-safe floating clock ---
         var PIXEL_SHIFT_MS = 25 * 1000;
+        var ART_SLIDE_MS = 60 * 1000;
         var screensaverOverlay = document.getElementById('screensaverOverlay');
         var screensaverClockWrap = document.getElementById('screensaverClockWrap');
         var screensaverOn = false;
         var lastActivity = Date.now();
         var pixelShiftTimer = null;
+
+        // Public-domain paintings from The Met (Open Access, CC0), resized to 1920px in assets/art/.
+        // Credits per file: assets/art/SOURCES.md.
+        var ART_WORKS = [
+            { slug: 'great-wave', title: 'A Grande Onda de Kanagawa', artist: 'Katsushika Hokusai', date: 'c. 1830–32' },
+            { slug: 'wheat-field-cypresses', title: 'Campo de Trigo com Ciprestes', artist: 'Vincent van Gogh', date: '1889' },
+            { slug: 'sunflowers', title: 'Girassóis', artist: 'Vincent van Gogh', date: '1887' },
+            { slug: 'harvesters', title: 'Os Ceifeiros', artist: 'Pieter Bruegel, o Velho', date: '1565' },
+            { slug: 'rocky-mountains', title: 'As Montanhas Rochosas, Pico Lander', artist: 'Albert Bierstadt', date: '1863' },
+            { slug: 'whalers', title: 'Baleeiros', artist: 'J. M. W. Turner', date: 'c. 1845' },
+            { slug: 'grande-jatte-study', title: 'Estudo para Uma Tarde de Domingo na Grande Jatte', artist: 'Georges Seurat', date: '1884' },
+            { slug: 'monet-family', title: 'A Família Monet no Jardim em Argenteuil', artist: 'Édouard Manet', date: '1874' },
+            { slug: 'boating', title: 'Passeio de Barco', artist: 'Édouard Manet', date: '1874' },
+            { slug: 'repast-of-the-lion', title: 'A Refeição do Leão', artist: 'Henri Rousseau', date: 'c. 1907' },
+            { slug: 'jalais-hill', title: 'Colina de Jalais, Pontoise', artist: 'Camille Pissarro', date: '1867' },
+            { slug: 'forest-in-winter', title: 'A Floresta no Inverno ao Pôr do Sol', artist: 'Théodore Rousseau', date: 'c. 1846–67' },
+            { slug: 'wheat-fields', title: 'Campos de Trigo', artist: 'Jacob van Ruisdael', date: 'c. 1670' },
+            { slug: 'hagar', title: 'Agar no Deserto', artist: 'Camille Corot', date: '1835' },
+            { slug: 'blind-orion', title: 'Órion Cego Buscando o Sol Nascente', artist: 'Nicolas Poussin', date: '1658' },
+            { slug: 'trojan-women', title: 'As Troianas Incendiando a Frota', artist: 'Claude Lorrain', date: 'c. 1643' }
+        ];
+        var saverImgs = [document.getElementById('saverImgA'), document.getElementById('saverImgB')];
+        var saverCaption = document.getElementById('saverCaption');
+        var artOrder = [];
+        var artPos = 0;
+        var artFront = 0;
+        var artTimer = null;
+        var captionTimer = null;
+
+        function startArt(favorites) {
+            // Only the favourites (all when none are picked), freshly shuffled so the same painting doesn't always open.
+            var favs = favorites || state.artFavorites;
+            artOrder = ART_WORKS.map(function(w, i) { return i; })
+                .filter(function(i) { return !favs.length || favs.indexOf(ART_WORKS[i].slug) !== -1; })
+                .sort(function() { return Math.random() - 0.5; });
+            if (!artOrder.length) artOrder = ART_WORKS.map(function(w, i) { return i; });
+            artPos = 0;
+            showNextArt();
+            artTimer = setInterval(showNextArt, ART_SLIDE_MS);
+        }
+
+        // Loads the next painting into the hidden layer, then crossfades to it with a slow drift (Ken Burns).
+        function showNextArt() {
+            var work = ART_WORKS[artOrder[artPos++ % artOrder.length]];
+            var back = saverImgs[1 - artFront];
+            back.onload = function() {
+                if (!screensaverOn) return;
+                back.classList.remove('drift');
+                void back.offsetWidth; // restart the drift animation on this layer
+                back.classList.add('visible', 'drift');
+                saverImgs[artFront].classList.remove('visible');
+                artFront = 1 - artFront;
+                // Caption shows for a few seconds per work, then fades (nothing static stays on an OLED).
+                document.getElementById('saverTitle').textContent = work.title;
+                document.getElementById('saverArtist').textContent = work.artist + ', ' + work.date;
+                saverCaption.classList.add('show');
+                clearTimeout(captionTimer);
+                captionTimer = setTimeout(function() { saverCaption.classList.remove('show'); }, 10000);
+            };
+            back.src = 'assets/art/' + work.slug + '.jpg';
+        }
+
+        function stopArt() {
+            clearInterval(artTimer);
+            clearTimeout(captionTimer);
+            saverCaption.classList.remove('show');
+            saverImgs.forEach(function(img) { img.onload = null; img.classList.remove('visible', 'drift'); });
+        }
 
         function shiftScreensaverClock() {
             var maxX = Math.min(window.innerWidth * 0.28, 260);
@@ -1978,20 +2678,34 @@
             screensaverClockWrap.style.transform = 'translate(' + x + 'px, ' + y + 'px)';
         }
 
-        function enterScreensaver() {
+        // style: 'art' or 'clock'; defaults to the saved choice (Ajustes "Ver agora" passes the draft one,
+        // plus the draft favourites).
+        function enterScreensaver(style, artFavorites) {
+            style = style || state.screensaver;
+            if (style === 'off') return;
             screensaverOn = true;
+            screensaverStartedAt = Date.now();
+            screensaverOverlay.classList.toggle('art-mode', style === 'art');
             screensaverOverlay.classList.add('active');
-            shiftScreensaverClock();
-            pixelShiftTimer = setInterval(shiftScreensaverClock, PIXEL_SHIFT_MS);
+            if (style === 'art') {
+                startArt(artFavorites);
+            } else {
+                shiftScreensaverClock();
+                pixelShiftTimer = setInterval(shiftScreensaverClock, PIXEL_SHIFT_MS);
+            }
         }
 
         function exitScreensaver() {
             screensaverOn = false;
             screensaverOverlay.classList.remove('active');
             clearInterval(pixelShiftTimer);
+            stopArt();
         }
 
-        function markActivity() {
+        var screensaverStartedAt = 0;
+        function markActivity(e) {
+            // The overlay appearing under a resting Magic Remote pointer fires a stray mousemove; give it a moment.
+            if (e && e.type === 'mousemove' && Date.now() - screensaverStartedAt < 1500) return;
             lastActivity = Date.now();
             if (screensaverOn) exitScreensaver();
         }
@@ -1999,7 +2713,8 @@
         document.addEventListener('mousedown', markActivity);
 
         setInterval(function() {
-            if (!screensaverOn && !modalOpen && !drawerOpen && Date.now() - lastActivity > IDLE_TIMEOUT_MS) {
+            if (!screensaverOn && !modalOpen && !drawerOpen && state.screensaver !== 'off'
+                && Date.now() - lastActivity > state.screensaverDelay * 60 * 1000) {
                 enterScreensaver();
             }
         }, 10000);
@@ -2008,26 +2723,33 @@
         document.getElementById('resetDefaultBtn').addEventListener('click', function() {
             tempFavorites = DEFAULT_FAVORITES.slice();
             tempDevices = {};
+            tempSaver = 'art';
+            tempSaverDelay = 3;
+            tempArtFavs = [];
+            renderSaverOptions();
             renderHDMIOptions();
             document.getElementById('cfgCity').value = '';
-            document.getElementById('cfgTheme').value = 'auto';
             document.getElementById('cfgTmdbKey').value = '';
             renderAppSelectorGrid();
             refreshModalNavList();
-            showToast('Defaults restored');
+            showToast('Padrões restaurados. Toque em Salvar para aplicar');
         });
 
         document.getElementById('saveModalBtn').addEventListener('click', function() {
             state.favorites = tempFavorites.slice();
             state.hdmiDevices = shallowClone(tempDevices);
             localStorage.setItem('fmtv_hdmi_devices', JSON.stringify(state.hdmiDevices));
+            state.screensaver = tempSaver;
+            state.screensaverDelay = tempSaverDelay;
+            localStorage.setItem('fmtv_screensaver', state.screensaver);
+            localStorage.setItem('fmtv_screensaver_delay', String(state.screensaverDelay));
+            state.artFavorites = tempArtFavs.slice();
+            localStorage.setItem('fmtv_art_favorites', JSON.stringify(state.artFavorites));
             state.city = document.getElementById('cfgCity').value.trim();
-            state.theme = document.getElementById('cfgTheme').value;
             state.tmdbKey = document.getElementById('cfgTmdbKey').value.trim();
 
             localStorage.setItem('fmtv_favorites', JSON.stringify(state.favorites));
             localStorage.setItem('fmtv_city', state.city);
-            localStorage.setItem('fmtv_theme', state.theme);
             localStorage.setItem('fmtv_tmdb_key', state.tmdbKey);
 
             renderAppsShelf();
@@ -2035,7 +2757,7 @@
             fetchWeather();
             fetchTrendingPicks();
             closeSettingsModal();
-            showToast('Saved & Applied!');
+            showToast('Ajustes salvos');
         });
 
         // --- Remote Control Key Handler ---
@@ -2068,7 +2790,9 @@
             // Back button on LG Magic Remote (461) or Escape
             if (e.keyCode === 461 || e.key === 'Escape' || e.key === 'GoBack') {
                 if (modalOpen) {
-                    closeSettingsModal();
+                    // Back leaves the HDMI picker first, then closes.
+                    if (!document.getElementById('hdmiPickerView').hidden) showHdmiPicker(false);
+                    else closeSettingsModal();
                     e.preventDefault();
                 } else if (drawerOpen) {
                     closeDrawer();
@@ -2086,13 +2810,10 @@
             }
 
             if (modalOpen) {
-                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-                    modalIndex = (modalIndex + 1) % modalNavItems.length;
-                    setModalFocus(modalNavItems[modalIndex]);
-                    e.preventDefault();
-                } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-                    modalIndex = (modalIndex - 1 + modalNavItems.length) % modalNavItems.length;
-                    setModalFocus(modalNavItems[modalIndex]);
+                if (/^Arrow(Up|Down|Left|Right)$/.test(e.key)) {
+                    var from = modalNavItems[modalIndex];
+                    var to = from && settingsMove(from, e.key);
+                    if (to) setModalFocus(to);
                     e.preventDefault();
                 } else if (e.key === 'Enter') {
                     var active = modalNavItems[modalIndex];
@@ -2105,7 +2826,10 @@
             }
 
             // Main Dashboard Spatial Navigation
-            if (e.key === 'ArrowRight') {
+            if (mainNavItems[curIndex] === heroBanner && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+                showHero(heroIndex + (e.key === 'ArrowRight' ? 1 : -1));
+                e.preventDefault();
+            } else if (e.key === 'ArrowRight') {
                 curIndex = (curIndex + 1) % mainNavItems.length;
                 setMainFocus(mainNavItems[curIndex]);
                 e.preventDefault();
